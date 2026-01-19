@@ -136,6 +136,7 @@ export function ChatMessage({ message, showAvatar = true }: ChatMessageProps) {
           <div className="mt-1">
             <a
               href={message.fileUrl}
+              download={message.fileName || "download"}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-3 px-4 py-3 bg-base-surface border border-base-border rounded-lg hover:border-accent transition-all-smooth group/file"

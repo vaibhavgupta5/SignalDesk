@@ -7,7 +7,7 @@ export interface Message {
   userName: string;
   userAvatar?: string;
   content: string;
-  type: "text" | "image" | "file";
+  type: "text" | "image" | "file" | "system";
   fileUrl?: string;
   fileName?: string;
   fileSize?: number;

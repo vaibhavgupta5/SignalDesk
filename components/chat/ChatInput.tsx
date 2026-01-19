@@ -108,8 +108,19 @@ export function ChatInput() {
       let messageType: "text" | "image" | "file" = "text";
 
       if (file) {
-        const uploadResponse = await messageAPI.uploadFile(file);
-        fileUrl = uploadResponse.data.url;
+        if (file.size > 10 * 1024 * 1024) {
+          alert("File is too large. Maximum size is 10MB.");
+          return;
+        }
+
+        const base64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+
+        fileUrl = base64;
         fileName = file.name;
         fileSize = file.size;
         messageType = file.type.startsWith("image/") ? "image" : "file";
@@ -215,16 +226,16 @@ export function ChatInput() {
           <Code size={18} />
         </button>
 
-       <textarea
-  ref={textareaRef}
-  value={message}
-  onChange={(e) => {
-    setMessage(e.target.value);
-    handleTyping();
-  }}
-  onKeyDown={handleKeyDown}
-  placeholder={`Message #${activeGroupId!.slice(-4)}`}
-  className="
+        <textarea
+          ref={textareaRef}
+          value={message}
+          onChange={(e) => {
+            setMessage(e.target.value);
+            handleTyping();
+          }}
+          onKeyDown={handleKeyDown}
+          placeholder={`Message #${activeGroupId!.slice(-4)}`}
+          className="
     flex-1 max-h-[300px] min-h-[24px]
     bg-transparent border-none
     ring-0 outline-none
@@ -234,10 +245,9 @@ export function ChatInput() {
     resize-none py-2.5 text-sm leading-relaxed
     scrollbar-thin scrollbar-thumb-white/10
   "
-  rows={1}
-  disabled={isUploading}
-/>
-
+          rows={1}
+          disabled={isUploading}
+        />
 
         <button
           onClick={handleSend}
