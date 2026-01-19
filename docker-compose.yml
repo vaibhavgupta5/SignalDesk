@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  nextjs:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: signaldesk-nextjs
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:3000
+      - NEXT_PUBLIC_SOCKET_URL=http://localhost:3001
+      - MONGODB_URI=${MONGODB_URI}
+      - JWT_SECRET=${JWT_SECRET}
+    env_file:
+      - .env.production
+    networks:
+      - signaldesk-network
+    depends_on:
+      - socket-server
+
+  socket-server:
+    build:
+      context: ./backend-socket
+      dockerfile: Dockerfile
+    container_name: signaldesk-socket
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      - PORT=3001
+      - MONGODB_URI=${MONGODB_URI}
+      - JWT_SECRET=${JWT_SECRET}
+      - CLIENT_URL=http://localhost:3000
+      - NODE_ENV=production
+    env_file:
+      - ./backend-socket/.env.production
+    networks:
+      - signaldesk-network
+
+networks:
+  signaldesk-network:
+    driver: bridge
