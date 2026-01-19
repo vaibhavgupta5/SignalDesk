@@ -96,29 +96,43 @@ export function MessageList() {
 
   return (
     <div className="flex-1 bg-[#0e0e11] flex flex-col">
-      <Virtuoso
-        ref={virtuosoRef}
-        data={groupMessages}
-        itemContent={(index, message) => {
-          const previousMessage = index > 0 ? groupMessages[index - 1] : null;
-          const showAvatar =
-            !previousMessage ||
-            previousMessage.userId !== message.userId ||
-            new Date(message.createdAt).getTime() -
-              new Date(previousMessage.createdAt).getTime() >
-              300000;
+      {groupMessages.length === 0 ? (
+        <div className="flex-1 flex flex-col items-center justify-center p-8 text-center animate-in fade-in-50">
+          <div className="w-16 h-16 bg-white/5 rounded-2xl flex items-center justify-center mb-4">
+            <span className="text-3xl">👋</span>
+          </div>
+          <h3 className="text-gray-200 font-semibold text-lg mb-2">
+            No messages yet
+          </h3>
+          <p className="text-gray-500 max-w-sm">
+            Say hello to start the conversation! Or just say meow.
+          </p>
+        </div>
+      ) : (
+        <Virtuoso
+          ref={virtuosoRef}
+          data={groupMessages}
+          itemContent={(index, message) => {
+            const previousMessage = index > 0 ? groupMessages[index - 1] : null;
+            const showAvatar =
+              !previousMessage ||
+              previousMessage.userId !== message.userId ||
+              new Date(message.createdAt).getTime() -
+                new Date(previousMessage.createdAt).getTime() >
+                300000;
 
-          return (
-            <ChatMessage
-              key={message._id}
-              message={message}
-              showAvatar={showAvatar}
-            />
-          );
-        }}
-        followOutput="smooth"
-        alignToBottom
-      />
+            return (
+              <ChatMessage
+                key={message._id}
+                message={message}
+                showAvatar={showAvatar}
+              />
+            );
+          }}
+          followOutput="smooth"
+          alignToBottom
+        />
+      )}
 
       {groupTypingUsers.length > 0 && (
         <div className="px-6 py-2 text-text-muted text-sm">

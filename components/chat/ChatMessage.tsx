@@ -42,16 +42,25 @@ export function ChatMessage({ message, showAvatar = true }: ChatMessageProps) {
       )}
 
       <div className="flex-1 min-w-0 overflow-hidden">
-        {showAvatar && (
+        {showAvatar && message.type !== "system" && (
           <div className="flex items-baseline gap-2 mb-1">
-            <span className="text-text-primary font-bold text-sm tracking-tight">
+            <span className="text-gray-200 font-bold text-sm tracking-tight">
               {message.userName}
             </span>
-            <span className="text-text-muted text-[11px] opacity-0 group-hover:opacity-100 transition-opacity">
+            <span className="text-gray-500 text-[11px] opacity-0 group-hover:opacity-100 transition-opacity">
               {formatMessageTime(message.createdAt)}
             </span>
           </div>
         )}
+
+        {message.type === "system" ? (
+          <div className="flex items-center justify-center w-full py-1">
+            <span className="bg-white/5 text-gray-400 text-xs px-3 py-1 rounded-full border border-white/5 flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+              {message.content}
+            </span>
+          </div>
+        ) : null}
 
         {message.type === "text" && (
           <div className="text-text-primary text-[15px] leading-relaxed break-words markdown-content">

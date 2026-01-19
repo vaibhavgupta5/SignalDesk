@@ -14,10 +14,12 @@ export interface Group {
 interface GroupState {
   groups: Group[];
   activeGroupId: string | null;
+  settingsGroupId: string | null;
   onlineUsers: string[]; // Added onlineUsers
 
   setGroups: (groups: Group[]) => void;
   setOnlineUsers: (users: string[]) => void; // Setter
+  setSettingsGroupId: (id: string | null) => void;
   addGroup: (group: Group) => void;
   setActiveGroup: (groupId: string) => void;
   updateGroup: (groupId: string, updates: Partial<Group>) => void;
@@ -31,6 +33,7 @@ import { groupAPI } from "@/lib/api";
 export const useGroupStore = create<GroupState>((set, get) => ({
   groups: [],
   activeGroupId: null,
+  settingsGroupId: null,
   onlineUsers: [],
 
   setGroups: (groups) => set({ groups }),
@@ -42,6 +45,7 @@ export const useGroupStore = create<GroupState>((set, get) => ({
     })),
 
   setActiveGroup: (groupId) => set({ activeGroupId: groupId }),
+  setSettingsGroupId: (id) => set({ settingsGroupId: id }),
 
   updateGroup: (groupId, updates) =>
     set((state) => ({

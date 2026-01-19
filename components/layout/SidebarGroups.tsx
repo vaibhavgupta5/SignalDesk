@@ -32,11 +32,12 @@ export function SidebarGroups() {
     removeGroup,
     onlineUsers,
     setOnlineUsers,
+    settingsGroupId,
+    setSettingsGroupId,
   } = useGroupStore();
   const { user } = useAuthStore();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isDMOpen, setIsDMOpen] = useState(false);
-  const [settingsGroupId, setSettingsGroupId] = useState<string | null>(null);
   const [projectMembers, setProjectMembers] = useState<any[]>([]);
 
   useEffect(() => {

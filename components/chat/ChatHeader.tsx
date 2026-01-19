@@ -5,7 +5,7 @@ import { useGroupStore } from "@/store/groupStore";
 import { useProjectStore } from "@/store/projectStore";
 
 export function ChatHeader() {
-  const { groups, activeGroupId } = useGroupStore();
+  const { groups, activeGroupId, setSettingsGroupId } = useGroupStore();
   const { projects, activeProjectId } = useProjectStore();
 
   const activeGroup = groups.find((g) => g._id === activeGroupId);
@@ -39,10 +39,17 @@ export function ChatHeader() {
         </div>
       </div>
 
-      <div className="flex items-center gap-3 text-gray-400 bg-white/5 px-3 py-1.5 rounded-full text-xs font-medium border border-white/5">
+      <button
+        onClick={() => setSettingsGroupId(activeGroup._id)}
+        className="flex items-center gap-3 text-gray-400 bg-white/5 px-3 py-1.5 rounded-full text-xs font-medium border border-white/5 hover:bg-white/10 transition-colors cursor-pointer"
+      >
         <Users size={14} className="text-gray-500" />
-        <span>{activeGroup.members?.length || 0}</span>
-      </div>
+        <span>
+          {activeGroup.isPrivate || activeGroup.type === "dm"
+            ? activeGroup.members?.length || 0
+            : activeProject?.members?.length || 0}
+        </span>
+      </button>
     </div>
   );
 }

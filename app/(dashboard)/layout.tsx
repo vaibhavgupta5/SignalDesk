@@ -9,6 +9,8 @@ import { useGroupStore } from "@/store/groupStore";
 import { authAPI, projectAPI } from "@/lib/api";
 import { socketClient } from "@/lib/socket";
 import { Loader2 } from "lucide-react";
+import { Toaster } from "sonner";
+import { NotificationListener } from "@/components/NotificationListener";
 
 export default function DashboardLayout({
   children,
@@ -80,5 +82,11 @@ export default function DashboardLayout({
     return null;
   }
 
-  return children;
+  return (
+    <>
+      <NotificationListener />
+      <Toaster position="bottom-right" theme="dark" />
+      {children}
+    </>
+  );
 }

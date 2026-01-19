@@ -29,8 +29,8 @@ const io = new Server(server, {
 const onlineUsers = new Map(); // userId -> connectionCount
 
 function broadcastOnlineUsers(ioInstance) {
-    const users = Array.from(onlineUsers.keys());
-    ioInstance.emit("users:online", users);
+  const users = Array.from(onlineUsers.keys());
+  ioInstance.emit("users:online", users);
 }
 
 mongoose
@@ -138,7 +138,8 @@ io.use(async (socket, next) => {
 
 io.on("connection", (socket) => {
   console.log(`User connected: ${socket.userId}`);
-  
+  socket.join(socket.userId); // Join user-specific room for private notifications
+
   // Update online status
   const currentCount = onlineUsers.get(socket.userId) || 0;
   onlineUsers.set(socket.userId, currentCount + 1);
@@ -207,6 +208,18 @@ io.on("connection", (socket) => {
 
       socket.join(`group:${groupId}`);
       console.log(`User ${socket.userId} joined group ${groupId}`);
+
+      // Broadcast user joined event (exclude sender)
+      socket.to(`group:${groupId}`).emit("new-message", {
+        _id: `system-${Date.now()}`, // Temporary ID
+        groupId,
+        userId: socket.userId,
+        userName: socket.user.name,
+        userAvatar: socket.user.avatar,
+        type: "system",
+        content: `${socket.user.name} joined the chat. Say meow to him!`,
+        createdAt: new Date().toISOString(),
+      });
     } catch (error) {
       console.error("Join group error:", error);
       socket.emit("error", { message: "Failed to join group" });
@@ -294,6 +307,38 @@ io.on("connection", (socket) => {
       io.to(`group:${groupId}`).emit("new-message", messageResponse);
 
       console.log(`Message sent to group ${groupId} by user ${socket.userId}`);
+
+      // Broadcast Notification
+      const notificationPayload = {
+        projectId: project._id,
+        projectName: project.name,
+        groupId,
+        groupName: group.type === "dm" ? "Direct Message" : group.name,
+        senderId: socket.userId,
+        senderName: socket.user.name,
+        content: content || (fileUrl ? "Sent a file" : "Sent a message"),
+        type: group.type,
+      };
+
+      if (group.type === "dm" || group.isPrivate) {
+        // Send to specific members (DMs or Private Channels)
+        // We need accurate member list. group.members contains ObjectIds.
+        group.members.forEach((memberId) => {
+          if (memberId.toString() !== socket.userId) {
+            io.to(memberId.toString()).emit(
+              "notification",
+              notificationPayload,
+            );
+          }
+        });
+      } else {
+        // Public Channel - Broadcast to project room
+        // Ensure sender is excluded simply by using socket.to?
+        // socket.to excludes sender.
+        socket
+          .to(`project:${project._id}`)
+          .emit("notification", notificationPayload);
+      }
     } catch (error) {
       console.error("Send message error:", error);
       socket.emit("error", { message: "Failed to send message" });
@@ -311,13 +356,13 @@ io.on("connection", (socket) => {
   socket.on("disconnect", () => {
     console.log(`User disconnected: ${socket.userId}`);
     if (socket.userId) {
-        const count = onlineUsers.get(socket.userId) || 0;
-        if (count <= 1) {
-            onlineUsers.delete(socket.userId);
-        } else {
-            onlineUsers.set(socket.userId, count - 1);
-        }
-        broadcastOnlineUsers(io);
+      const count = onlineUsers.get(socket.userId) || 0;
+      if (count <= 1) {
+        onlineUsers.delete(socket.userId);
+      } else {
+        onlineUsers.set(socket.userId, count - 1);
+      }
+      broadcastOnlineUsers(io);
     }
   });
 });

@@ -19,7 +19,7 @@ import { useGroupStore } from "@/store/groupStore";
 import { groupAPI, projectAPI } from "@/lib/api";
 import { useAuthStore } from "@/store/authStore";
 import { cn } from "@/lib/utils";
-import { AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar } from "@/components/ui/avatar";
 
 interface ChannelSettingsModalProps {
   isOpen: boolean;
@@ -231,84 +231,117 @@ export function ChannelSettingsModal({
 
                 {activeTab === "members" && (
                   <div className="space-y-6">
-                    <div className="flex gap-4 h-[400px]">
-                      {/* Existing Members */}
-                      <div className="flex-1 border border-base-border rounded-lg flex flex-col">
+                    {!isPrivate ? (
+                      <div className="flex-1 border border-base-border rounded-lg flex flex-col h-[400px]">
                         <div className="p-3 border-b border-base-border bg-base-bg/30 font-medium text-sm">
-                          Members ({groupMembers.length})
+                          Everyone in Project ({projectMembers.length})
+                        </div>
+                        <div className="p-2 text-xs text-blue-400 bg-blue-500/10 border-b border-blue-500/20 px-3 py-2">
+                          Public channels are accessible to all project members.
+                          To restrict access, make this channel private.
                         </div>
                         <ScrollArea className="flex-1 p-2">
-                          {groupMembers.map((m) => (
+                          {projectMembers.map((m) => (
                             <div
                               key={m._id}
                               className="flex items-center justify-between p-2 hover:bg-base-hover rounded group"
                             >
                               <div className="flex items-center gap-2 overflow-hidden">
-                                <Avatar className="w-6 h-6">
-                                  <AvatarImage src={m.avatar} />
-                                  <AvatarFallback>{m.name[0]}</AvatarFallback>
-                                </Avatar>
-                                <span className="text-sm truncate">
+                                <Avatar
+                                  className="w-6 h-6"
+                                  src={m.avatar}
+                                  fallback={m.name[0]}
+                                />
+                                <span className="text-sm truncate text-text-primary">
                                   {m.name}
                                 </span>
                               </div>
-                              <button
-                                onClick={() => removeMember(m._id)}
-                                className="opacity-0 group-hover:opacity-100 text-text-muted hover:text-red-500 transition-opacity"
-                              >
-                                <UserMinus size={14} />
-                              </button>
                             </div>
                           ))}
                         </ScrollArea>
                       </div>
-
-                      {/* Add Members */}
-                      <div className="flex-1 border border-base-border rounded-lg flex flex-col">
-                        <div className="p-3 border-b border-base-border bg-base-bg/30 font-medium text-sm">
-                          Add People
-                        </div>
-                        <div className="p-2 border-b border-base-border">
-                          <div className="relative">
-                            <Search
-                              size={14}
-                              className="absolute left-2 top-1/2 -translate-y-1/2 text-text-muted"
-                            />
-                            <Input
-                              value={searchTerm}
-                              onChange={(e) => setSearchTerm(e.target.value)}
-                              placeholder="Search..."
-                              className="h-8 pl-8 text-xs"
-                            />
+                    ) : (
+                      <div className="flex gap-4 h-[400px]">
+                        {/* Existing Members */}
+                        <div className="flex-1 border border-base-border rounded-lg flex flex-col">
+                          <div className="p-3 border-b border-base-border bg-base-bg/30 font-medium text-sm">
+                            Members ({groupMembers.length})
                           </div>
-                        </div>
-                        <ScrollArea className="flex-1 p-2">
-                          {filteredCandidates.map((m) => (
-                            <div
-                              key={m._id}
-                              className="flex items-center justify-between p-2 hover:bg-base-hover rounded cursor-pointer"
-                              onClick={() => addMember(m)}
-                            >
-                              <div className="flex items-center gap-2 overflow-hidden">
-                                <Avatar className="w-6 h-6">
-                                  <AvatarImage src={m.avatar} />
-                                  <AvatarFallback>{m.name[0]}</AvatarFallback>
-                                </Avatar>
-                                <span className="text-sm truncate">
-                                  {m.name}
-                                </span>
+                          <ScrollArea className="flex-1 p-2">
+                            {groupMembers.map((m) => (
+                              <div
+                                key={m._id}
+                                className="flex items-center justify-between p-2 hover:bg-base-hover rounded group"
+                              >
+                                <div className="flex items-center gap-2 overflow-hidden">
+                                  <Avatar
+                                    className="w-6 h-6"
+                                    src={m.avatar}
+                                    fallback={m.name[0]}
+                                  />
+                                  <span className="text-sm truncate">
+                                    {m.name}
+                                  </span>
+                                </div>
+                                <button
+                                  onClick={() => removeMember(m._id)}
+                                  className="opacity-0 group-hover:opacity-100 text-text-muted hover:text-red-500 transition-opacity"
+                                >
+                                  <UserMinus size={14} />
+                                </button>
                               </div>
-                              <Plus size={14} className="text-text-muted" />
+                            ))}
+                          </ScrollArea>
+                        </div>
+
+                        {/* Add Members */}
+                        <div className="flex-1 border border-base-border rounded-lg flex flex-col">
+                          <div className="p-3 border-b border-base-border bg-base-bg/30 font-medium text-sm">
+                            Add People
+                          </div>
+                          <div className="p-2 border-b border-base-border">
+                            <div className="relative">
+                              <Search
+                                size={14}
+                                className="absolute left-2 top-1/2 -translate-y-1/2 text-text-muted"
+                              />
+                              <Input
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                placeholder="Search..."
+                                className="h-8 pl-8 text-xs"
+                              />
                             </div>
-                          ))}
-                          {filteredCandidates.length === 0 && (
-                            <p className="text-xs text-text-muted text-center py-4">
-                              No remaining members found
-                            </p>
-                          )}
-                        </ScrollArea>
+                          </div>
+                          <ScrollArea className="flex-1 p-2">
+                            {filteredCandidates.map((m) => (
+                              <div
+                                key={m._id}
+                                className="flex items-center justify-between p-2 hover:bg-base-hover rounded cursor-pointer"
+                                onClick={() => addMember(m)}
+                              >
+                                <div className="flex items-center gap-2 overflow-hidden">
+                                  <Avatar
+                                    className="w-6 h-6"
+                                    src={m.avatar}
+                                    fallback={m.name[0]}
+                                  />
+                                  <span className="text-sm truncate">
+                                    {m.name}
+                                  </span>
+                                </div>
+                                <Plus size={14} className="text-text-muted" />
+                              </div>
+                            ))}
+                            {filteredCandidates.length === 0 && (
+                              <p className="text-xs text-text-muted text-center py-4">
+                                No remaining members found
+                              </p>
+                            )}
+                          </ScrollArea>
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
                 )}
 
@@ -323,7 +356,10 @@ export function ChannelSettingsModal({
                         Once you delete a channel, there is no going back.
                         Please be certain.
                       </p>
-                      <Button variant="destructive" onClick={handleDelete}>
+                      <Button
+                        className="bg-red-600 hover:bg-red-700 text-white"
+                        onClick={handleDelete}
+                      >
                         Delete Channel
                       </Button>
                     </div>

@@ -215,19 +215,29 @@ export function ChatInput() {
           <Code size={18} />
         </button>
 
-        <textarea
-          ref={textareaRef}
-          value={message}
-          onChange={(e) => {
-            setMessage(e.target.value);
-            handleTyping();
-          }}
-          onKeyDown={handleKeyDown}
-          placeholder={`Message #${activeGroupId!.slice(-4)}`}
-          className="flex-1 max-h-[300px] min-h-[24px] bg-transparent border-none ring-0 text-gray-200 placeholder:text-gray-600 resize-none py-2.5 text-sm leading-relaxed scrollbar-thin scrollbar-thumb-white/10"
-          rows={1}
-          disabled={isUploading}
-        />
+       <textarea
+  ref={textareaRef}
+  value={message}
+  onChange={(e) => {
+    setMessage(e.target.value);
+    handleTyping();
+  }}
+  onKeyDown={handleKeyDown}
+  placeholder={`Message #${activeGroupId!.slice(-4)}`}
+  className="
+    flex-1 max-h-[300px] min-h-[24px]
+    bg-transparent border-none
+    ring-0 outline-none
+    focus:outline-none focus:ring-0 focus:ring-offset-0
+    focus-visible:outline-none focus-visible:ring-0
+    text-gray-200 placeholder:text-gray-600
+    resize-none py-2.5 text-sm leading-relaxed
+    scrollbar-thin scrollbar-thumb-white/10
+  "
+  rows={1}
+  disabled={isUploading}
+/>
+
 
         <button
           onClick={handleSend}
