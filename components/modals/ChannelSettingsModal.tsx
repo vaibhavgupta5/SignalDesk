@@ -19,7 +19,6 @@ import { useGroupStore } from "@/store/groupStore";
 import { groupAPI, projectAPI } from "@/lib/api";
 import { useAuthStore } from "@/store/authStore";
 import { cn } from "@/lib/utils";
-import { Avatar } from "@/components/ui/avatar";
 
 interface ChannelSettingsModalProps {
   isOpen: boolean;
