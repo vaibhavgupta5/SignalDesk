@@ -26,8 +26,8 @@ class ClassifyRequest(BaseModel):
     context: Optional[ContextIn] = None
 
 
-class ExtractRequest(BaseModel):
-    """Extract structured fields from messages"""
+class ActionRequest(BaseModel):
+    """Request to extract actions with assignees and deadlines"""
     messages: List[ChatMessage]
     context: Optional[ContextIn] = None
 

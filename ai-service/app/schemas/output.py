@@ -35,17 +35,19 @@ class ClassifyOut(BaseModel):
     explanation: Optional[str] = None
 
 
-class ExtractedField(BaseModel):
-    """Extracted key-value pair with confidence"""
-    key: str
-    value: Any
-    confidence: ConfidenceScore
+class ActionItem(BaseModel):
+    """Detailed action item with assignment and priority"""
+    task: str
+    assignee: Optional[str] = "unassigned"
+    deadline: Optional[str] = None
+    priority: str = Field(description="'critical', 'high', 'medium', 'low'")
+    reasoning: Optional[str] = None
 
 
-class ExtractOut(BaseModel):
-    """Structured extraction result"""
-    items: List[ExtractedField]
-    raw_text: Optional[str] = None
+class ActionOut(BaseModel):
+    """Result of action extraction"""
+    actions: List[ActionItem]
+    summary: str
 
 
 class Contradiction(BaseModel):
@@ -63,10 +65,19 @@ class ContradictOut(BaseModel):
     is_consistent: bool
 
 
+class TimelineItem(BaseModel):
+    """Event in the conversation timeline"""
+    event: str
+    type: str  # decision, action, suggestion, change
+    timestamp: Optional[str] = None
+    user: Optional[str] = None
+
+
 class SummarizeOut(BaseModel):
-    """Summary output"""
+    """Summary output with detailed content and timeline"""
     summary: str
     key_points: List[str] = []
+    timeline: List[TimelineItem] = []
     confidence: ConfidenceScore
 
 

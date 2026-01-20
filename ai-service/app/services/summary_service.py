@@ -25,7 +25,7 @@ class SummaryService(LLMClient[SummarizeOut]):
         messages: List[ChatMessage],
         context: Optional[ContextIn] = None
     ) -> str:
-        """Build summary prompt"""
+        """Build summary prompt with data"""
         
         # Format conversation with metadata
         conversation_lines = []
@@ -36,32 +36,22 @@ class SummaryService(LLMClient[SummarizeOut]):
         conversation = "\n".join(conversation_lines)
         
         # Build context
-        context_str = ""
+        context_str = "None"
         if context:
-            context_parts = []
-            if context.prior_decisions:
-                context_parts.append(f"Prior decisions: {len(context.prior_decisions)} items")
-            if context.prior_actions:
-                context_parts.append(f"Prior actions: {len(context.prior_actions)} items")
-            if context_parts:
-                context_str = f"\n\nContext: {', '.join(context_parts)}"
+            parts = []
+            if context.prior_decisions: parts.append(f"Decisions: {context.prior_decisions}")
+            if context.prior_actions: parts.append(f"Actions: {context.prior_actions}")
+            if parts:
+                context_str = "\n".join(parts)
         
         return f"""
-CONVERSATION ({len(messages)} messages):
+CONVERSATION DATA:
 {conversation}
+
+PRIOR CONTEXT:
 {context_str}
 
-Generate a concise summary (1-3 sentences) capturing:
-1. Key decisions made
-2. Actions assigned
-3. Critical constraints or blockers
-
-Return a JSON object:
-{{
-  "summary": "Your concise summary here",
-  "key_points": ["point1", "point2"],
-  "confidence": 0.85
-}}
+Please generate the detailed summary and high-fidelity sequential timeline now.
 """
     
     def parse_response(self, response: dict) -> dict:
@@ -81,16 +71,18 @@ Return a JSON object:
             
         if isinstance(parsed, dict):
             # Try potential keys
-            summary = parsed.get("summary", parsed.get("text", parsed.get("conclusion", "")))
-            key_points = parsed.get("key_points", parsed.get("points", parsed.get("bullets", [])))
+            summary = parsed.get("summary", parsed.get("text", ""))
+            key_points = parsed.get("key_points", parsed.get("points", []))
+            timeline = parsed.get("timeline", [])
             confidence = parsed.get("confidence", 0.7)
             
             result = {
                 "summary": summary,
                 "key_points": key_points,
+                "timeline": timeline,
                 "confidence": confidence
             }
-            logger.info("Successfully parsed summary result from LLM")
+            logger.info("Successfully parsed advanced summary result from LLM")
             return result
         
         logger.warning(f"Parsed JSON is not a dict: {type(parsed)}")
@@ -101,9 +93,9 @@ Return a JSON object:
         messages: List[ChatMessage],
         context: Optional[ContextIn] = None
     ) -> SummarizeOut:
-        """Generate summary of messages"""
+        """Generate high-fidelity summary of messages"""
         from app.services.base import logger
-        logger.info(f"Summarizing {len(messages)} messages")
+        logger.info(f"Generating advanced summary for {len(messages)} messages")
         
         # Build prompt and query LLM
         user_prompt = self.build_user_prompt(messages, context)
@@ -112,24 +104,38 @@ Return a JSON object:
         # Parse response
         result = self.parse_response(response)
         
+        from app.schemas.output import TimelineItem
+        
         if result and result.get("summary"):
             summary = result["summary"]
             key_points = result.get("key_points", [])
+            raw_timeline = result.get("timeline", [])
             confidence = float(result.get("confidence", 0.75))
-            reason = "LLM-generated summary"
-            logger.debug(f"LLM Summary: {summary[:100]}...")
+            reason = "LLM-generated detailed summary"
+            
+            # Map raw timeline to objects
+            timeline = []
+            for item in raw_timeline:
+                try:
+                    timeline.append(TimelineItem(**item))
+                except Exception:
+                    continue
+            
+            logger.debug(f"LLM Summary Length: {len(summary)} chars")
         else:
             # Fallback
-            logger.info("LLM summary failed, triggering fallback summarization")
+            logger.info("LLM advanced summary failed, using keyword fallback")
             result = self._fallback_summarize(messages)
             summary = result["summary"]
             key_points = result["key_points"]
+            timeline = [] # Fallback doesn't support complex timelines yet
             confidence = result["confidence"]
-            reason = "Fallback keyword summary"
+            reason = "Fallback summary (LLM failure)"
         
         return SummarizeOut(
             summary=summary,
             key_points=key_points,
+            timeline=timeline,
             confidence=ConfidenceScore(
                 score=normalize_confidence(confidence),
                 reason=reason

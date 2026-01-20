@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 import uvicorn
-from app.api import classify, extract, contradict, summarize, ask, health
+from app.api import classify, action, contradict, summarize, ask, health
 from app.config.logging import configure_logging
 
 configure_logging()
@@ -8,7 +8,7 @@ configure_logging()
 app = FastAPI(title="SignalDesk AI")
 
 app.include_router(classify.router, prefix="/ai")
-app.include_router(extract.router, prefix="/ai")
+app.include_router(action.router, prefix="/ai")
 app.include_router(contradict.router, prefix="/ai")
 app.include_router(summarize.router, prefix="/ai")
 app.include_router(ask.router, prefix="/ai")
