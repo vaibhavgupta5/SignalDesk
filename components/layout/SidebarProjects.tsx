@@ -8,6 +8,8 @@ import {
   UserPlus,
   Pencil,
   ClipboardCheck,
+  TrendingUp,
+  CheckCircle2,
 } from "lucide-react";
 import { useProjectStore } from "@/store/projectStore";
 import { useUIStore } from "@/store/uiStore";
@@ -169,6 +171,22 @@ export function SidebarProjects() {
             title="Context Store"
           >
             <ClipboardCheck size={18} />
+          </button>
+
+          <button
+            onClick={() => router.push("/summary")}
+            className="w-10 h-10 rounded-xl hover:bg-white/5 text-text-muted flex items-center justify-center transition-all duration-200"
+            title="Intelligence Summary"
+          >
+            <TrendingUp size={18} />
+          </button>
+
+          <button
+            onClick={() => router.push("/tasks")}
+            className="w-10 h-10 rounded-xl hover:bg-white/5 text-text-muted flex items-center justify-center transition-all duration-200"
+            title="Action Items"
+          >
+            <CheckCircle2 size={18} />
           </button>
 
           <button

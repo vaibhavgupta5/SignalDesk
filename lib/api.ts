@@ -87,9 +87,17 @@ export const aiAPI = {
       query,
       context,
     }),
+  action: (messages: any[], context?: any) =>
+    axios.post(`${AI_SERVICE_URL}/ai/action`, { messages, context }),
+  contradict: (messages: any[], context?: any) =>
+    axios.post(`${AI_SERVICE_URL}/ai/contradict`, { messages, context }),
 };
 
 export const contextAPI = {
   getAll: (params?: { category?: string; groupId?: string; limit?: number }) =>
     apiClient.get("/context", { params }),
+};
+
+export const summaryAPI = {
+  get: (groupId: string) => apiClient.get("/summary", { params: { groupId } }),
 };

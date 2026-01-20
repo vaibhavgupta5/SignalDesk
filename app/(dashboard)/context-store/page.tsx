@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { SidebarProjects } from "@/components/layout/SidebarProjects";
 import { SidebarGroups } from "@/components/layout/SidebarGroups";
-import { ChatHeader } from "@/components/chat/ChatHeader";
 import { contextAPI } from "@/lib/api";
 import { useUIStore } from "@/store/uiStore";
 import {
@@ -17,6 +16,7 @@ import {
   Layers,
   RefreshCw,
   Sparkles,
+  Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -39,44 +39,26 @@ const CATEGORIES = [
   {
     id: "DECISION",
     label: "Decisions",
-    icon: CheckCircle2,
-    color: "text-emerald-400",
-    bg: "bg-emerald-400/10",
   },
   {
     id: "ACTION",
     label: "Actions",
-    icon: ClipboardCheck,
-    color: "text-blue-400",
-    bg: "bg-blue-400/10",
   },
   {
     id: "SUGGESTION",
     label: "Suggestions",
-    icon: Lightbulb,
-    color: "text-amber-400",
-    bg: "bg-amber-400/10",
   },
   {
     id: "QUESTION",
     label: "Questions",
-    icon: HelpCircle,
-    color: "text-purple-400",
-    bg: "bg-purple-400/10",
   },
   {
     id: "CONSTRAINT",
     label: "Constraints",
-    icon: AlertCircle,
-    color: "text-rose-400",
-    bg: "bg-rose-400/10",
   },
   {
     id: "ASSUMPTION",
     label: "Assumptions",
-    icon: Layers,
-    color: "text-indigo-400",
-    bg: "bg-indigo-400/10",
   },
 ];
 
@@ -99,10 +81,9 @@ export default function ContextStorePage() {
     try {
       const response = await contextAPI.getAll();
       setContexts(response.data.contexts);
-      if (isManual) toast.success("Signals updated");
+      if (isManual) toast.success("Refreshed");
     } catch (error) {
       console.error("Failed to fetch context store:", error);
-      if (isManual) toast.error("Failed to refresh signals");
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -112,16 +93,6 @@ export default function ContextStorePage() {
   useEffect(() => {
     fetchContexts();
   }, []);
-
-  const handleTestDummy = () => {
-    socketClient.emit("debug:save-dummy-context", {
-      groupId: activeGroupId,
-      category: activeTab,
-    });
-    // The socket server will emit signals-updated,
-    // but we can show a local toast too if we want.
-    // However, the ChatInput already listens for signals-updated.
-  };
 
   const filteredContexts = contexts.filter((ctx) =>
     ctx.category.some((c) => c.toUpperCase() === activeTab),
@@ -135,39 +106,24 @@ export default function ContextStorePage() {
       </div>
 
       <div className="flex-1 flex flex-col min-w-0 bg-base-bg relative overflow-hidden">
-        <header className="h-16 flex items-center justify-between px-6 border-b border-white/5 bg-[#0a0a0c]">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-accent/10 flex items-center justify-center border border-accent/20">
-              <ClipboardCheck className="text-accent" size={20} />
-            </div>
-            <div>
-              <h1 className="text-lg font-bold tracking-tight text-white">
-                Context Store
-              </h1>
-              <p className="text-xs text-gray-500 font-medium">
-                AI-extracted signals from your conversations
-              </p>
-            </div>
+        {/* Minimalist Header */}
+        <header className="h-16 flex items-center justify-between px-12 border-b border-base-border">
+          <div>
+            <h1 className="text-xl font-bold tracking-tight">Context Store</h1>
+            <p className="text-xs text-text-muted font-medium mt-0.5">
+              AI-extracted conversation signals
+            </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-6">
             <Button
-              variant="outline"
-              size="sm"
-              onClick={handleTestDummy}
-              className="hidden md:flex items-center gap-2 bg-white/5 border-white/10 hover:bg-white/10 text-xs h-9"
-            >
-              <Sparkles size={14} className="text-amber-400" />
-              Test Signal
-            </Button>
-            <Button
-              variant="outline"
+              variant="ghost"
               size="icon"
               onClick={() => fetchContexts(true)}
               disabled={refreshing}
               className={cn(
-                "bg-white/5 border-white/10 hover:bg-white/10 h-9 w-9",
-                refreshing && "animate-spin",
+                "hover:bg-base-surface h-9 w-9 text-text-muted transition-colors",
+                refreshing && "animate-spin text-accent",
               )}
             >
               <RefreshCw size={16} />
@@ -175,13 +131,12 @@ export default function ContextStorePage() {
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-6 scrollbar-thin scrollbar-thumb-white/5">
-          <div className="max-w-5xl mx-auto">
-            {/* Category Tabs */}
-            <div className="flex flex-wrap gap-2 mb-8 p-1.5 bg-black/20 rounded-2xl border border-white/5 w-fit">
+        <div className="flex-1 overflow-y-auto no-scrollbar py-12 px-6">
+          <div className="max-w-5xl mx-auto space-y-12">
+            {/* Category Navigation - Minimalist Tabs */}
+            <div className="flex gap-8 border-b border-base-border pb-4">
               {CATEGORIES.map((cat) => {
                 const isActive = activeTab === cat.id;
-                const Icon = cat.icon;
                 const count = contexts.filter((ctx) =>
                   ctx.category.some((c) => c.toUpperCase() === cat.id),
                 ).length;
@@ -191,126 +146,91 @@ export default function ContextStorePage() {
                     key={cat.id}
                     onClick={() => setActiveTab(cat.id)}
                     className={cn(
-                      "flex items-center gap-2.5 px-4 py-2 rounded-xl transition-all duration-300 relative group",
+                      "text-sm font-bold tracking-tight transition-all relative pb-4",
                       isActive
-                        ? "bg-accent text-white shadow-lg shadow-accent/20"
-                        : "text-gray-500 hover:text-gray-300 hover:bg-white/5",
+                        ? "text-white"
+                        : "text-text-muted hover:text-text-secondary",
                     )}
                   >
-                    <Icon size={18} />
-                    <span className="text-sm font-semibold">{cat.label}</span>
+                    {cat.label}
                     {count > 0 && (
-                      <span
-                        className={cn(
-                          "text-[10px] px-1.5 py-0.5 rounded-md font-bold",
-                          isActive
-                            ? "bg-white/20 text-white"
-                            : "bg-white/10 text-gray-400 group-hover:bg-white/15",
-                        )}
-                      >
+                      <span className="ml-2 text-[10px] text-accent opacity-60">
                         {count}
                       </span>
+                    )}
+                    {isActive && (
+                      <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-accent" />
                     )}
                   </button>
                 );
               })}
             </div>
 
-            {/* List */}
+            {/* Content List */}
             {loading ? (
-              <div className="flex flex-col items-center justify-center py-20 gap-4">
-                <div className="w-10 h-10 border-2 border-accent/20 border-t-accent rounded-full animate-spin" />
-                <p className="text-gray-500 animate-pulse font-medium">
-                  Analyzing your signals...
+              <div className="flex flex-col items-center justify-center py-40 gap-4">
+                <Loader2 className="animate-spin text-accent" size={24} />
+                <p className="text-xs text-text-muted uppercase tracking-[0.2em] font-bold">
+                  Scanning Signals
                 </p>
               </div>
             ) : filteredContexts.length > 0 ? (
-              <div className="grid gap-4">
+              <div className="grid gap-8">
                 {filteredContexts.map((ctx) => (
                   <div
                     key={ctx._id}
-                    className="group bg-[#111114] border border-white/5 rounded-2xl p-5 hover:border-accent/30 hover:bg-[#15151a] transition-all duration-500 shadow-sm"
+                    className="bg-base-surface border border-base-border p-10 shadow-xl group transition-all"
                   >
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="flex items-center gap-3">
-                        <div
-                          className={cn(
-                            "p-2 rounded-lg",
-                            CATEGORIES.find((c) => c.id === activeTab)?.bg,
-                          )}
-                        >
-                          {(() => {
-                            const Icon =
-                              CATEGORIES.find((c) => c.id === activeTab)
-                                ?.icon || MessageSquare;
-                            return (
-                              <Icon
-                                className={
-                                  CATEGORIES.find((c) => c.id === activeTab)
-                                    ?.color
-                                }
-                                size={18}
-                              />
-                            );
-                          })()}
-                        </div>
-                        <div>
-                          <p className="text-xs font-bold text-accent uppercase tracking-widest">
+                    <div className="flex items-start justify-between mb-8">
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-3">
+                          <span className="text-[10px] font-black uppercase tracking-[0.2em] text-accent">
                             {activeTab}
-                          </p>
-                          <div className="flex items-center gap-2 text-[11px] text-gray-500 font-medium">
-                            <span className="flex items-center gap-1">
-                              <MessageSquare size={12} />
-                              {ctx.groupId?.name || "Global Chat"}
-                            </span>
-                            <span>•</span>
-                            <span className="flex items-center gap-1">
-                              {ctx.userId?.avatar ? (
-                                <img
-                                  src={ctx.userId.avatar}
-                                  alt={ctx.userId.name}
-                                  className="w-3 h-3 rounded-full"
-                                />
-                              ) : (
-                                <div className="w-3 h-3 rounded-full bg-accent/20 flex items-center justify-center text-[8px] font-bold text-accent">
-                                  {ctx.userId?.name?.charAt(0) || "U"}
-                                </div>
-                              )}
-                              {ctx.userId?.name || "Unknown"}
-                            </span>
-                            <span>•</span>
-                            <span className="flex items-center gap-1">
-                              <Calendar size={12} />
-                              {new Date(ctx.classifiedAt).toLocaleDateString()}
-                            </span>
-                          </div>
+                          </span>
+                          <span className="h-4 w-px bg-base-border" />
+                          <span className="text-[10px] text-text-muted font-bold uppercase tracking-widest">
+                            {new Date(ctx.classifiedAt).toLocaleDateString()}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {ctx.userId?.avatar ? (
+                            <img
+                              src={ctx.userId.avatar}
+                              className="w-4 h-4 rounded-full opacity-60"
+                            />
+                          ) : (
+                            <div className="w-4 h-4 rounded-full bg-accent/20" />
+                          )}
+                          <span className="text-xs font-bold text-text-muted">
+                            {ctx.userId?.name || "System"}
+                          </span>
+                          <span className="text-xs text-text-muted opacity-40">
+                            in
+                          </span>
+                          <span className="text-xs font-bold text-text-secondary underline decoration-base-border underline-offset-4">
+                            {ctx.groupId?.name || "Global"}
+                          </span>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <div className="h-1.5 w-16 bg-white/5 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-accent"
-                            style={{
-                              width: `${(ctx.confidence?.score || 0) * 100}%`,
-                            }}
-                          />
-                        </div>
-                        <span className="text-[10px] font-bold text-gray-500">
+                      <div className="flex flex-col items-end gap-1">
+                        <span className="text-[10px] font-black text-white/40">
+                          CONFIDENCE
+                        </span>
+                        <span className="text-xl font-bold text-white tracking-tighter">
                           {Math.round((ctx.confidence?.score || 0) * 100)}%
-                          Match
                         </span>
                       </div>
                     </div>
 
-                    <p className="text-[15px] text-gray-200 leading-relaxed font-medium mb-4">
+                    <p className="text-lg text-text-secondary leading-relaxed font-medium mb-10 decoration-accent/5 underline underline-offset-8">
                       {ctx.content}
                     </p>
 
                     {ctx.confidence?.reason && (
-                      <div className="px-3 py-2 bg-black/30 rounded-lg border border-white/5">
-                        <p className="text-[11px] text-gray-500 italic">
-                          <span className="text-accent font-bold not-italic mr-1">
-                            AI Insight:
+                      <div className="pt-8 border-t border-base-border/50">
+                        <p className="text-xs text-text-muted italic leading-relaxed">
+                          <span className="text-accent font-bold not-italic mr-2 uppercase tracking-tighter text-[10px]">
+                            AI Context:
                           </span>
                           {ctx.confidence.reason}
                         </p>
@@ -320,16 +240,12 @@ export default function ContextStorePage() {
                 ))}
               </div>
             ) : (
-              <div className="flex flex-col items-center justify-center py-32 rounded-3xl border border-dashed border-white/5 bg-black/10">
-                <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center mb-6">
-                  <MessageSquare className="text-gray-600" size={32} />
-                </div>
-                <h3 className="text-lg font-bold text-white mb-2">
-                  No {activeTab.toLowerCase()} identified yet
-                </h3>
-                <p className="text-sm text-gray-500 max-w-xs text-center font-medium">
-                  Keep chatting! SignalDesk AI will automatically extract key{" "}
-                  {activeTab.toLowerCase()} as your team discusses.
+              <div className="flex flex-col items-center justify-center py-32 border border-base-border bg-base-surface/20">
+                <MessageSquare className="text-text-muted mb-4" size={24} />
+                <h3 className="text-lg font-bold">Clear Horizon</h3>
+                <p className="text-sm text-text-muted mt-2 max-w-xs text-center">
+                  SignalDesk hasn't identified any critical{" "}
+                  {activeTab.toLowerCase()} in recent discussions.
                 </p>
               </div>
             )}

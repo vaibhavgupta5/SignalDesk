@@ -147,6 +147,149 @@ async function processAIQueue(groupId) {
     queue.isProcessing = false;
   }
 }
+async function updateGroupSummary(groupId) {
+  if (mongoose.connection.readyState !== 1) return;
+
+  try {
+    // 1. Get last 50 messages for context
+    const messages = await Message.find({ group: groupId })
+      .sort({ createdAt: -1 })
+      .limit(50)
+      .populate("sender", "name");
+
+    if (messages.length < 3) return; // Not enough to summarize
+
+    const formattedMessages = messages.reverse().map((m) => ({
+      user: m.sender?.name || "Member",
+      message: m.content,
+      timestamp: m.createdAt,
+    }));
+
+    // 2. Call AI Summarize API
+    const response = await axios.post(`${AI_SERVICE_URL}/ai/summarize`, {
+      messages: formattedMessages,
+    });
+
+    const summaryData = response.data;
+
+    if (summaryData && summaryData.summary) {
+      // 3. Upsert Summary in DB
+      const updatedSummary = await Summary.findOneAndUpdate(
+        { groupId },
+        {
+          content: summaryData.summary,
+          keyPoints: summaryData.key_points || [],
+          updatedAt: new Date(),
+        },
+        { upsert: true, new: true },
+      );
+
+      console.log(`[AI] [Summary] Updated for group ${groupId}`);
+
+      // 4. Emit update to group
+      io.to(`group:${groupId}`).emit("summary-updated", {
+        groupId,
+        summary: updatedSummary.content,
+        keyPoints: updatedSummary.keyPoints,
+        updatedAt: updatedSummary.updatedAt,
+      });
+    }
+  } catch (error) {
+    console.error(
+      `[AI] Error updating summary for group ${groupId}:`,
+      error.message,
+    );
+  }
+}
+
+async function checkGroupContradictions(groupId) {
+  if (mongoose.connection.readyState !== 1) return;
+
+  try {
+    const messages = await Message.find({ group: groupId })
+      .sort({ createdAt: -1 })
+      .limit(30)
+      .populate("sender", "name");
+
+    if (messages.length < 5) return;
+
+    const formattedMessages = messages.reverse().map((m) => ({
+      user: m.sender?.name || "Member",
+      message: m.content,
+      timestamp: m.createdAt,
+    }));
+
+    const contexts = await Context.find({ groupId })
+      .sort({ classifiedAt: -1 })
+      .limit(20);
+
+    const contextData = {
+      prior_decisions: contexts
+        .filter((c) => c.category.includes("DECISION"))
+        .map((c) => c.content),
+      prior_actions: contexts
+        .filter((c) => c.category.includes("ACTION"))
+        .map((c) => c.content),
+      prior_constraints: contexts
+        .filter((c) => c.category.includes("CONSTRAINT"))
+        .map((c) => c.content),
+      prior_assumptions: contexts
+        .filter((c) => c.category.includes("ASSUMPTION"))
+        .map((c) => c.content),
+    };
+
+    const response = await axios.post(`${AI_SERVICE_URL}/ai/contradict`, {
+      messages: formattedMessages,
+      context: contextData,
+    });
+
+    const contradictionData = response.data;
+
+    if (
+      contradictionData &&
+      contradictionData.contradictions &&
+      contradictionData.contradictions.length > 0
+    ) {
+      const criticalContradictions = contradictionData.contradictions.filter(
+        (c) => c.severity === "critical" || c.severity === "high",
+      );
+
+      if (criticalContradictions.length > 0) {
+        const warningMessage = `⚠️ Contradiction Detected: ${criticalContradictions[0].explanation}`;
+
+        const messageData = {
+          group: groupId,
+          sender: new mongoose.Types.ObjectId("000000000000000000000000"),
+          type: "text",
+          content: warningMessage,
+        };
+
+        const message = await Message.create(messageData);
+
+        io.to(`group:${groupId}`).emit("new-message", {
+          _id: message._id.toString(),
+          groupId,
+          userId: "ai-system",
+          userName: "signalDesk",
+          userAvatar: "https://api.dicebear.com/7.x/bottts/svg?seed=signaldesk",
+          content: message.content,
+          type: "text",
+          createdAt: message.createdAt,
+        });
+
+        console.log(
+          `[AI] [Contradiction] Warning sent to group ${groupId}: ${criticalContradictions.length} contradictions found`,
+        );
+      }
+    }
+  } catch (error) {
+    console.error(
+      `[AI] Error checking contradictions for group ${groupId}:`,
+      error.message,
+    );
+  }
+}
+
 const MessageSchema = new mongoose.Schema({
   group: { type: mongoose.Schema.Types.ObjectId, ref: "Group", required: true },
   sender: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
@@ -179,6 +322,27 @@ const ContextSchema = new mongoose.Schema({
 
 const Context =
   mongoose.models.Context || mongoose.model("Context", ContextSchema);
+
+const SummarySchema = new mongoose.Schema({
+  groupId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Group",
+    required: true,
+    unique: true,
+  },
+  content: {
+    type: String,
+    required: true,
+  },
+  keyPoints: [String],
+  updatedAt: {
+    type: Date,
+    default: Date.now,
+  },
+});
+
+const Summary =
+  mongoose.models.Summary || mongoose.model("Summary", SummarySchema);
 
 const UserSchema = new mongoose.Schema({
   name: String,
@@ -373,7 +537,7 @@ io.on("connection", (socket) => {
       const project = await Project.findById(group.project);
       if (
         !project ||
-        !project.members.some((id) => id.toString() === socket.userId)
+        !project.members.some((id) => id && id.toString() === socket.userId)
       ) {
         socket.emit("error", { message: "Not authorized" });
         return;
@@ -381,7 +545,7 @@ io.on("connection", (socket) => {
 
       if (
         group.isPrivate &&
-        !group.members.some((id) => id.toString() === socket.userId)
+        !group.members.some((id) => id && id.toString() === socket.userId)
       ) {
         socket.emit("error", {
           message: "Not a member of this private channel",
@@ -465,6 +629,8 @@ io.on("connection", (socket) => {
             );
             queue.timeoutId = setTimeout(() => {
               processAIQueue(groupId);
+              updateGroupSummary(groupId);
+              checkGroupContradictions(groupId);
               queue.timeoutId = null;
             }, 5000);
           }

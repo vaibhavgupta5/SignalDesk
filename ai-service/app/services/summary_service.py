@@ -17,7 +17,7 @@ class SummaryService(LLMClient[SummarizeOut]):
         super().__init__(
             prompt_file="summary.txt",
             temperature=0.2,
-            max_tokens=1024
+            max_tokens=2048
         )
     
     def build_user_prompt(
