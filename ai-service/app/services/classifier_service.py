@@ -149,22 +149,34 @@ Return a JSON array with one object per message:
         text_lower = text.lower()
         types = []
         
-        if any(w in text_lower for w in ["must", "should", "have to", "need to", "required", "cannot", "can't"]):
-            types.append("CONSTRAINT")
-        
-        if any(w in text_lower for w in ["decide", "decided", "decision", "chose", "chosen", "agreed", "confirmed"]):
+        # Decision Markers
+        if any(w in text_lower for w in ["decided", "choose", "go with", "confirmed", "agreed", "settled on", "final", "approved"]):
             types.append("DECISION")
         
-        if any(w in text_lower for w in ["will do", "implement", "build", "create", "complete", "finish", "by tomorrow", "deliver", "ship"]):
+        # Action Markers
+        if any(w in text_lower for w in ["will do", "implement", "build", "create", "complete", "finish", "deliver", "ship", "send", "deploy", "by tomorrow"]):
             types.append("ACTION")
         
-        if any(w in text_lower for w in ["assume", "assuming", "probably", "think", "believe", "expect", "likely"]):
+        # Assumption Markers
+        if any(w in text_lower for w in ["assume", "assuming", "probably", "think", "believe", "expect", "likely", "should be", "guess"]):
             types.append("ASSUMPTION")
         
-        if any(w in text_lower for w in ["suggest", "maybe", "consider", "could", "might", "try", "what if", "how about"]):
+        # Suggestion Markers
+        if any(w in text_lower for w in ["suggest", "maybe", "consider", "could", "might", "try", "what if", "how about", "perhaps"]):
             types.append("SUGGESTION")
         
-        return (types if types else ["SUGGESTION"], 0.6)
+        # Constraint Markers
+        if any(w in text_lower for w in ["must", "should", "have to", "need to", "required", "cannot", "can't", "limit", "restriction"]):
+            types.append("CONSTRAINT")
+
+        # Question Markers
+        if "?" in text_lower or any(w in text_lower for w in ["how", "why", "when", "who", "what", "where"]):
+            types.append("QUESTION")
+        
+        if not types:
+            types = ["OTHER"]
+            
+        return (types, 0.4)
 
 
 # Singleton instance

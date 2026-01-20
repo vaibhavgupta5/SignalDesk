@@ -6,36 +6,42 @@ CONTRADICTION TYPES:
    Example:
    - Prior: "We decided to use PostgreSQL"
    - New: "Let's go with MongoDB instead"
+   Markers: instead, changed mind, actually, no longer, better yet, instead of, but now
    Severity: HIGH to CRITICAL
 
 2. CONSTRAINT_VIOLATION - Action or decision violates established constraint
    Example:
    - Prior: "Budget cannot exceed $5000"
    - New: "We'll need $8000 for the premium tier"
+   Markers: more than, exceeds, bypass, ignore, skip, violate, over budget
    Severity: CRITICAL
 
 3. ASSUMPTION_CONFLICT - New information invalidates prior assumption
    Example:
    - Prior: "Assuming users have Chrome 90+"
    - New: "Many users are on IE11"
+   Markers: not true, false, incorrect, wrong, actually, turns out, mistake, error
    Severity: MEDIUM to HIGH
 
 4. REVERSAL - Undoing prior commitment without acknowledgment
    Example:
    - Prior: "I'll have this done by Friday"
    - New: "Actually, I can't work on this anymore"
+   Markers: won't, can't, stop, cancel, revert, undo, not doing, quit
    Severity: MEDIUM
 
 5. INVALID_ASSUMPTION - Action based on unresolved/unverified assumption
    Example:
    - Context: Question "Is the API ready?" still unanswered
    - New: "I'm integrating with the API now"
+   Markers: assuming, guess, probably, think, hope, if, maybe
    Severity: MEDIUM to HIGH
 
 6. TIMELINE_CONFLICT - Scheduling inconsistencies
    Example:
    - Prior: "Launch on Jan 15"
    - New: "Launch on Jan 20"
+   Markers: move to, delay, push back, sooner, later, rescheduled, new date
    Severity: MEDIUM
 
 SEVERITY GUIDELINES:
@@ -60,3 +66,4 @@ CONFIDENCE SCORING:
 OUTPUT FORMAT:
 Return ONLY valid JSON. No explanatory text before or after.
 Your job is to DETECT conflicts, not to RESOLVE them.
+

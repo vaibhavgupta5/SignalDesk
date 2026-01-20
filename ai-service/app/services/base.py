@@ -55,8 +55,8 @@ class LLMClient(ABC, Generic[T]):
         full_prompt = f"{self.prompt_template}\n\n{user_prompt}"
         
         # Check if API key is configured
-        if not settings.GEMINI_KEY:
-            logger.warning("GEMINI_KEY not set, using mock response")
+        if not settings.GEMINI_API_KEY:
+            logger.warning("GEMINI_API_KEY not set, using mock response")
             return await self._mock_response(user_prompt)
         
         try:
@@ -64,7 +64,7 @@ class LLMClient(ABC, Generic[T]):
                 response = await client.post(
                     f"https://generativelanguage.googleapis.com/v1beta/models/{settings.MODEL}:generateContent",
                     headers={"Content-Type": "application/json"},
-                    params={"key": settings.GEMINI_KEY},
+                    params={"key": settings.GEMINI_API_KEY},
                     json={
                         "contents": [{"parts": [{"text": full_prompt}]}],
                         "generationConfig": {
@@ -74,17 +74,29 @@ class LLMClient(ABC, Generic[T]):
                         }
                     }
                 )
+                print(f"DEBUG: Gemini Status: {response.status_code}")
                 response.raise_for_status()
                 result = response.json()
                 
                 # Extract text from Gemini response
-                text = result.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "{}")
+                candidates = result.get("candidates", [])
+                if not candidates:
+                    print(f"DEBUG: No candidates: {result}")
+                    logger.warning(f"No candidates in response: {result}")
+                    return {"response": "{}", "success": False, "error": "No candidates"}
+                
+                text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "{}")
+                print(f"DEBUG: LLM Response (first 100 chars): {text[:100]}...")
                 return {"response": text, "success": True}
                 
         except httpx.HTTPError as e:
+            print(f"DEBUG: HTTP Error: {e}")
+            if hasattr(e, 'response'):
+                print(f"DEBUG: Error Body: {e.response.text}")
             logger.error(f"Gemini API error: {e}")
             return {"response": "{}", "success": False, "error": str(e)}
         except Exception as e:
+            print(f"DEBUG: Unexpected Error: {e}")
             logger.error(f"Unexpected error: {e}")
             return {"response": "{}", "success": False, "error": str(e)}
     
@@ -94,7 +106,7 @@ class LLMClient(ABC, Generic[T]):
             "response": "{}",
             "success": False,
             "mock": True,
-            "note": "GEMINI_KEY not configured"
+            "note": "GEMINI_API_KEYnot configured"
         }
     
     @staticmethod

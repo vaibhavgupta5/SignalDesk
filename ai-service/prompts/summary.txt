@@ -8,10 +8,10 @@ SUMMARY STRUCTURE:
    - Example: "Team decided on PostgreSQL; API due Friday"
 
 2. KEY POINTS (bullet points)
-   - Decisions made
-   - Actions assigned (WHO does WHAT by WHEN)
-   - Constraints or blockers identified
-   - Open questions remaining
+   - Decisions made (Markers: decided, chose, agreed, confirmed)
+   - Actions assigned (Markers: investigate, implement, build, send, deliver)
+   - Constraints or blockers (Markers: must, should, blocked, waiting, cannot)
+   - Open questions remaining (Markers: how, why, when, who, ?)
 
 3. CONFIDENCE
    - Score how completely the summary captures the conversation
@@ -43,3 +43,4 @@ EXAMPLE OUTPUT:
 
 OUTPUT FORMAT:
 Return ONLY valid JSON. No explanatory text before or after.
+

@@ -29,7 +29,7 @@ async def query_gemini(
     # Example structure (requires google-generativeai or httpx):
     #
     # import anthropic
-    # client = anthropic.Anthropic(api_key=settings.GEMINI_KEY)
+    # client = anthropic.Anthropic(api_key=settings.GEMINI_API_KEY)
     # msg = await client.messages.create(
     #     model=model,
     #     max_tokens=max_tokens,

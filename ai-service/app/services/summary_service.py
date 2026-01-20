@@ -94,35 +94,60 @@ Return a JSON object:
         
         if result and result.get("summary"):
             summary = result["summary"]
+            key_points = result.get("key_points", [])
             confidence = float(result.get("confidence", 0.75))
             reason = "LLM-generated summary"
         else:
-            # Fallback: simple extractive summary
-            summary = self._fallback_summarize(messages)
-            confidence = 0.5
-            reason = "Fallback extractive summary"
+            # Fallback
+            result = self._fallback_summarize(messages)
+            summary = result["summary"]
+            key_points = result["key_points"]
+            confidence = result["confidence"]
+            reason = "Fallback keyword summary"
         
         return SummarizeOut(
             summary=summary,
+            key_points=key_points,
             confidence=ConfidenceScore(
                 score=normalize_confidence(confidence),
                 reason=reason
             )
         )
     
-    def _fallback_summarize(self, messages: List[ChatMessage]) -> str:
-        """Fallback simple summarization"""
+    def _fallback_summarize(self, messages: List[ChatMessage]) -> dict:
+        """Fallback simple summarization with key point extraction"""
         if not messages:
-            return "No messages to summarize."
+            return {"summary": "No messages to summarize.", "key_points": [], "confidence": 0.4}
         
-        # Take first and last message as summary anchors
         combined = " ".join([m.message for m in messages])
+        text_lower = combined.lower()
         
-        if len(combined) <= 200:
-            return combined
+        # Extract potential key points using markers
+        key_points = []
         
-        # Simple truncation with ellipsis
-        return combined[:197] + "..."
+        # Decision markers
+        if any(w in text_lower for w in ["decided", "chose", "agreed", "confirmed"]):
+            key_points.append("DECISION: Potentially made (keyword detected)")
+            
+        # Action markers
+        if any(w in text_lower for w in ["investigate", "implement", "build", "send", "deliver"]):
+             key_points.append("ACTION: Work item mentioned")
+             
+        # Blocker markers
+        if any(w in text_lower for w in ["must", "should", "blocked", "waiting", "cannot"]):
+             key_points.append("BLOCKER/CONSTRAINT: Limitation identified")
+             
+        # Question markers
+        if "?" in text_lower:
+             key_points.append("QUESTION: Open item remaining")
+
+        summary = combined[:197] + "..." if len(combined) > 200 else combined
+        
+        return {
+            "summary": summary,
+            "key_points": key_points,
+            "confidence": 0.4
+        }
 
 
 # Singleton instance

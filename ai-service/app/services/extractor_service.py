@@ -126,33 +126,53 @@ Return a JSON object with extracted fields:
         items = []
         text_lower = text.lower()
         
-        # Deadline detection
-        if any(w in text_lower for w in ["by tomorrow", "deadline", "due", "before", "by end of"]):
+        # Temporal detection
+        if any(w in text_lower for w in ["by", "due", "deadline", "tomorrow", "friday", "monday", "next week", "at", "on", "untill", "within"]):
             items.append(
                 ExtractedField(
-                    key="has_deadline",
-                    value=True,
-                    confidence=ConfidenceScore(score=0.7, reason="Deadline keyword detected")
+                    key="temporal",
+                    value=text,
+                    confidence=ConfidenceScore(score=0.4, reason="Temporal keyword detected (fallback)")
                 )
             )
         
-        # Assignment detection
-        if any(w in text_lower for w in ["will handle", "assigned to", "responsible", "owner", "lead"]):
+        # People detection
+        if any(w in text_lower for w in ["will handle", "responsible", "for review", "approval from", "assigned to", "owner", "lead", "contact"]):
             items.append(
                 ExtractedField(
-                    key="has_assignment",
-                    value=True,
-                    confidence=ConfidenceScore(score=0.6, reason="Assignment keyword detected")
+                    key="people",
+                    value=text,
+                    confidence=ConfidenceScore(score=0.4, reason="People keyword detected (fallback)")
                 )
             )
         
-        # Priority detection
-        if any(w in text_lower for w in ["urgent", "asap", "priority", "critical", "important"]):
+        # Deliverables detection
+        if any(w in text_lower for w in ["create", "update", "generate", "build", "deliver", "ship", "send", "write", "design"]):
             items.append(
                 ExtractedField(
-                    key="priority",
-                    value="high",
-                    confidence=ConfidenceScore(score=0.75, reason="Priority keyword detected")
+                    key="deliverable",
+                    value=text,
+                    confidence=ConfidenceScore(score=0.4, reason="Deliverable keyword detected (fallback)")
+                )
+            )
+
+        # Resources detection
+        if any(w in text_lower for w in ["budget", "cost", "price", "use", "with", "requires", "depends on", "tool", "software", "database"]):
+             items.append(
+                ExtractedField(
+                    key="resource",
+                    value=text,
+                    confidence=ConfidenceScore(score=0.4, reason="Resource keyword detected (fallback)")
+                )
+            )
+
+        # Priority & Status detection
+        if any(w in text_lower for w in ["urgent", "asap", "priority", "critical", "p0", "blocked", "waiting", "pending", "risk", "delay", "issue"]):
+             items.append(
+                ExtractedField(
+                    key="priority_status",
+                    value=text,
+                    confidence=ConfidenceScore(score=0.5, reason="Priority/Status keyword detected (fallback)")
                 )
             )
         

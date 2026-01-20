@@ -6,32 +6,38 @@ EXTRACTION CATEGORIES:
    - deadline: "by Friday" → "2024-01-19" or "Friday"
    - duration: "takes 2 weeks" → "2 weeks"
    - schedule: "meeting at 3pm" → "15:00"
+   Markers: by, due, deadline, tomorrow, Friday, Monday, next week, at, on, untill, within
 
 2. PEOPLE (assignees, stakeholders, mentions)
    - assignee: "Bob will handle..." → "Bob"
    - owner: "Alice is responsible for..." → "Alice"
    - reviewer: "send to Charlie for review" → "Charlie"
    - stakeholder: "need approval from legal team" → "legal team"
+   Markers: will handle, responsible, for review, approval from, assigned to, owner, lead, contact
 
 3. DELIVERABLES (outputs, artifacts)
    - deliverable: "create the API spec" → "API spec"
    - artifact: "update the README" → "README"
    - output: "generate the report" → "report"
+   Markers: create, update, generate, build, deliver, ship, send, write, design
 
 4. RESOURCES (budget, tools, dependencies)
    - budget: "not exceed $5000" → "$5000"
    - tool: "use PostgreSQL" → "PostgreSQL"
    - dependency: "requires auth service" → "auth service"
+   Markers: budget, cost, price, use, with, requires, depends on, tool, software, database
 
 5. PRIORITIES & STATUS
    - priority: "urgent", "critical", "P0", "asap" → "high"
    - status: "blocked by...", "waiting for..." → "blocked"
    - risk: "might delay...", "potential issue..." → extract risk
+   Markers: urgent, asap, priority, critical, P0, blocked, waiting, pending, risk, delay, issue
 
 6. QUANTITATIVE
    - count: "3 microservices" → 3
    - percentage: "80% complete" → 80
    - size: "10GB limit" → "10GB"
+   Markers: total, count, average, percent, %, gb, mb, kb, limit, size
 
 EXTRACTION RULES:
 - Extract ONLY explicitly stated information
@@ -48,3 +54,4 @@ CONFIDENCE SCORING:
 
 OUTPUT FORMAT:
 Return ONLY valid JSON. No explanatory text before or after.
+

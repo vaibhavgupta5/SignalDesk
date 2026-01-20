@@ -66,4 +66,5 @@ class ContradictOut(BaseModel):
 class SummarizeOut(BaseModel):
     """Summary output"""
     summary: str
+    key_points: List[str] = []
     confidence: ConfidenceScore

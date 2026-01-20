@@ -153,30 +153,68 @@ Return a JSON object:
         is_consistent = True
         text_lower = text.lower()
         
-        negation_words = ["not", "cancel", "revert", "stop", "don't", "won't", "instead", "actually", "no longer"]
+        # Conflict markers from contradiction.txt
+        conflict_markers = {
+            "DECISION_CONFLICT": ["instead", "changed mind", "actually", "no longer", "better yet", "instead of", "but now", "revert", "cancel"],
+            "CONSTRAINT_VIOLATION": ["more than", "exceeds", "bypass", "ignore", "skip", "violate", "over budget", "too much", "limit"],
+            "ASSUMPTION_CONFLICT": ["not true", "false", "incorrect", "wrong", "turns out", "mistake", "error", "misunderstanding"],
+            "REVERSAL": ["won't", "can't", "stop", "cancel", "revert", "undo", "not doing", "quit", "abandon"]
+        }
         
-        if context and context.prior_decisions:
-            for decision in context.prior_decisions:
-                decision_lower = decision.lower()
-                # Check if any key words from decision appear with negation
-                if any(neg in text_lower for neg in negation_words):
-                    # Simple word overlap check
-                    decision_words = set(decision_lower.split())
-                    text_words = set(text_lower.split())
-                    if decision_words & text_words:  # If there's overlap
-                        contradictions.append(
-                            Contradiction(
-                                claim_a=text,
-                                claim_b=f"Prior decision: {decision}",
-                                severity="high",
-                                confidence=ConfidenceScore(
-                                    score=0.55,
-                                    reason="Negation with topic overlap detected"
-                                ),
-                                explanation="Text may contradict prior decision"
+        if context:
+            # Check for Decision conflicts by looking for negations/changes related to prior decisions
+            if context.prior_decisions:
+                for decision in context.prior_decisions:
+                    decision_lower = decision.lower()
+                    if any(m in text_lower for m in conflict_markers["DECISION_CONFLICT"]):
+                        # Check for word overlap to see if same topic
+                        decision_words = set(w for w in decision_lower.split() if len(w) > 3)
+                        text_words = set(w for w in text_lower.split() if len(w) > 3)
+                        if decision_words & text_words:
+                            contradictions.append(
+                                Contradiction(
+                                    claim_a=text,
+                                    claim_b=f"Prior decision: {decision}",
+                                    severity="high",
+                                    confidence=ConfidenceScore(score=0.4, reason="Decision conflict keywords + topic overlap"),
+                                    explanation="Message may contradict a prior decision using change-of-mind keywords."
+                                )
                             )
+                            is_consistent = False
+
+            # Check for Constraint violations
+            if context.prior_constraints:
+                for constraint in context.prior_constraints:
+                    constraint_lower = constraint.lower()
+                    if any(m in text_lower for m in conflict_markers["CONSTRAINT_VIOLATION"]):
+                        constraint_words = set(w for w in constraint_lower.split() if len(w) > 3)
+                        text_words = set(w for w in text_lower.split() if len(w) > 3)
+                        if constraint_words & text_words:
+                            contradictions.append(
+                                Contradiction(
+                                    claim_a=text,
+                                    claim_b=f"Prior constraint: {constraint}",
+                                    severity="critical",
+                                    confidence=ConfidenceScore(score=0.4, reason="Constraint violation keywords"),
+                                    explanation="Message appears to bypass or exceed an established constraint."
+                                )
+                            )
+                            is_consistent = False
+
+            # Check for Reversals of actions
+            if context.prior_actions:
+                if any(m in text_lower for m in conflict_markers["REVERSAL"]):
+                    # If it's a "can't" or "won't" message, it might be reversing an action
+                     contradictions.append(
+                        Contradiction(
+                            claim_a=text,
+                            claim_b="Prior actions",
+                            severity="medium",
+                            confidence=ConfidenceScore(score=0.3, reason="Reversal keyword detected"),
+                            explanation="This message sounds like a refusal or reversal of a committed task."
                         )
-                        is_consistent = False
+                    )
+                     is_consistent = False
         
         return contradictions, is_consistent
 
