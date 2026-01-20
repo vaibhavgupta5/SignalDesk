@@ -48,4 +48,5 @@ class AskRequest(BaseModel):
     """Ask a specific question or query a category from messages"""
     query_type: str  # e.g., "DECISION", "ACTION", etc.
     messages: List[ChatMessage]
+    query: Optional[str] = None
     context: Optional[ContextIn] = None

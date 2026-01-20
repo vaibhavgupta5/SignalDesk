@@ -43,8 +43,6 @@ const GroupSchema = new Schema({
 GroupSchema.index({ project: 1 });
 GroupSchema.index({ project: 1, name: 1 });
 
-GroupSchema.index({ project: 1, name: 1 });
-
 if (mongoose.models.Group) {
   delete mongoose.models.Group;
 }

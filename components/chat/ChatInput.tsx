@@ -5,13 +5,26 @@ import { Paperclip, Send, X, Image as ImageIcon, Code } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/store/authStore";
 import { useGroupStore } from "@/store/groupStore";
+import { useChatStore } from "@/store/chatStore";
 import { socketClient } from "@/lib/socket";
 import { messageAPI } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
+import { aiAPI, contextAPI } from "@/lib/api";
+import {
+  CheckCircle2,
+  ClipboardCheck,
+  Lightbulb,
+  AlertCircle,
+  HelpCircle,
+  Layers,
+  MessageCircle,
+} from "lucide-react";
 
 export function ChatInput() {
   const { user } = useAuthStore();
   const { activeGroupId } = useGroupStore();
+  const { setAIProcessing } = useChatStore();
   const [message, setMessage] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [filePreview, setFilePreview] = useState<string | null>(null);
@@ -19,6 +32,67 @@ export function ChatInput() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout>();
+  const [showCommands, setShowCommands] = useState(false);
+  const [commandIndex, setCommandIndex] = useState(0);
+
+  const COMMANDS = [
+    {
+      id: "DECISION",
+      label: "Decision",
+      icon: CheckCircle2,
+      desc: "Search through decisions",
+      color: "text-emerald-400",
+      bg: "bg-emerald-400/10",
+    },
+    {
+      id: "ACTION",
+      label: "Action",
+      icon: ClipboardCheck,
+      desc: "Find action items",
+      color: "text-blue-400",
+      bg: "bg-blue-400/10",
+    },
+    {
+      id: "SUGGESTION",
+      label: "Suggestion",
+      icon: Lightbulb,
+      desc: "Review suggestions",
+      color: "text-amber-400",
+      bg: "bg-amber-400/10",
+    },
+    {
+      id: "QUESTION",
+      label: "Question",
+      icon: HelpCircle,
+      desc: "Check unanswered questions",
+      color: "text-purple-400",
+      bg: "bg-purple-400/10",
+    },
+    {
+      id: "CONSTRAINT",
+      label: "Constraint",
+      icon: AlertCircle,
+      desc: "Look for constraints",
+      color: "text-rose-400",
+      bg: "bg-rose-400/10",
+    },
+    {
+      id: "ASSUMPTION",
+      label: "Assumption",
+      icon: Layers,
+      desc: "Identify assumptions",
+      color: "text-indigo-400",
+      bg: "bg-indigo-400/10",
+    },
+    {
+      id: "OTHER",
+      label: "Other",
+      icon: MessageCircle,
+      desc: "General search",
+      color: "text-gray-400",
+      bg: "bg-gray-400/10",
+    },
+  ];
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -26,6 +100,27 @@ export function ChatInput() {
       textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 200)}px`;
     }
   }, [message]);
+
+  useEffect(() => {
+    const handleSignalsUpdated = (data: {
+      count: number;
+      message: string;
+      groupId: string;
+    }) => {
+      // Only show notification if it's for the current group
+      if (data.groupId === activeGroupId) {
+        toast.success(data.message, {
+          description: "AI analysis results saved directly to messages",
+          duration: 4000,
+        });
+      }
+    };
+
+    socketClient.on("signals-updated", handleSignalsUpdated);
+    return () => {
+      socketClient.off("signals-updated", handleSignalsUpdated);
+    };
+  }, [activeGroupId]);
 
   const handleTyping = () => {
     if (!activeGroupId) return;
@@ -97,7 +192,98 @@ export function ChatInput() {
 
   const handleSend = async () => {
     if (!activeGroupId || !user) return;
-    if (!message.trim() && !file) return;
+    const trimmedMessage = message.trim();
+    if (!trimmedMessage && !file) return;
+
+    // Detect slash command
+    if (trimmedMessage.startsWith("/") && !file) {
+      const parts = trimmedMessage.split(" ");
+      const cmd = parts[0].slice(1).toUpperCase();
+      const query = parts.slice(1).join(" ");
+
+      const matchedCmd = COMMANDS.find((c) => c.id === cmd);
+      if (matchedCmd) {
+        try {
+          setIsUploading(true);
+          setAIProcessing(activeGroupId, true);
+          socketClient.emit("ai-thinking", {
+            groupId: activeGroupId,
+            isThinking: true,
+          });
+
+          setMessage(""); // Clear input
+          setShowCommands(false);
+
+          // 1. Fetch ALL contexts for this category in THIS group
+          const contextRes = await contextAPI.getAll({
+            category: matchedCmd.id,
+            groupId: activeGroupId,
+            // limit: 10, // Removed limit to fetch all available context
+          });
+
+          const historyMessages = contextRes.data.contexts.map((ctx: any) => ({
+            user: ctx.userId?.name || "Member",
+            message: ctx.content,
+            timestamp: ctx.classifiedAt,
+          }));
+
+          if (historyMessages.length === 0) {
+            socketClient.emit("send-system-message", {
+              groupId: activeGroupId,
+              userName: "signalDesk",
+              content: `I couldn't find any prior ${matchedCmd.label.toLowerCase()}s in this group to analyze. Try chatting more!`,
+            });
+            return;
+          }
+
+          // 2. Call AI Ask API with the explicit query
+          const aiRes = await aiAPI.ask(matchedCmd.id, historyMessages, query);
+          const { items, ai_insight } = aiRes.data;
+
+          // 3. Construct AI Reply with better structure
+          let replyContent = `### 🤖 signalDesk Analysis\n`;
+
+          if (query) {
+            replyContent += `**Query:** *"${query}"*\n`;
+          }
+
+          replyContent += `\n---\n\n`;
+
+          if (ai_insight) {
+            replyContent += `#### 💡 Strategic Insight\n${ai_insight}\n\n`;
+          }
+
+          if (items && items.length > 0) {
+            replyContent += `---\n\n#### 🔍 Reference ${matchedCmd.label}s\n`;
+            items.slice(0, 3).forEach((item: any) => {
+              replyContent += `* **"${item.text}"** — *${item.user}*\n`;
+            });
+          }
+
+          replyContent += `\n\n> *Analysis based on latest ${historyMessages.length} signals*`;
+
+          // 4. Send as an AI message via socket (broadcast and save)
+          socketClient.emit("send-system-message", {
+            groupId: activeGroupId,
+            userName: "signalDesk",
+            content: replyContent,
+          });
+
+          return;
+        } catch (error) {
+          console.error("AI Ask error:", error);
+          toast.error("AI service error. Please try again later.");
+        } finally {
+          setIsUploading(false);
+          setAIProcessing(activeGroupId, false);
+          socketClient.emit("ai-thinking", {
+            groupId: activeGroupId,
+            isThinking: false,
+          });
+          return;
+        }
+      }
+    }
 
     try {
       setIsUploading(true);
@@ -127,7 +313,7 @@ export function ChatInput() {
       }
 
       const messageData = {
-        content: message.trim(),
+        content: trimmedMessage,
         type: messageType,
         fileUrl,
         fileName,
@@ -147,18 +333,54 @@ export function ChatInput() {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (showCommands) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setCommandIndex((prev) => (prev + 1) % COMMANDS.length);
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setCommandIndex(
+          (prev) => (prev - 1 + COMMANDS.length) % COMMANDS.length,
+        );
+      } else if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        const cmd = COMMANDS[commandIndex];
+        setMessage(`/${cmd.id} `);
+        setShowCommands(false);
+      } else if (e.key === "Escape") {
+        setShowCommands(false);
+      }
+      return;
+    }
+
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
     }
   };
 
+  const filteredCommands = message.startsWith("/")
+    ? COMMANDS.filter(
+        (cmd) =>
+          cmd.label
+            .toLowerCase()
+            .includes(message.slice(1).split(" ")[0].toLowerCase()) ||
+          cmd.id
+            .toLowerCase()
+            .includes(message.slice(1).split(" ")[0].toLowerCase()),
+      )
+    : [];
+
+  useEffect(() => {
+    setCommandIndex(0);
+  }, [filteredCommands.length]);
+
   if (!activeGroupId) {
     return null;
   }
 
   return (
-    <div className="p-5 bg-[#111114] border-t border-white/5">
+    <div className="p-5 bg-[#111114] border-t border-white/5 relative">
       {/* File Previews */}
       {filePreview && (
         <div className="mb-4 relative inline-block group">
@@ -173,6 +395,81 @@ export function ChatInput() {
           >
             <X size={14} />
           </button>
+        </div>
+      )}
+
+      {/* Command Suggestions */}
+      {showCommands && filteredCommands.length > 0 && (
+        <div className="absolute bottom-full left-5 mb-4 w-72 bg-[#1a1a1d]/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden z-50 animate-in fade-in slide-in-from-bottom-2 duration-300">
+          <div className="px-4 py-3 border-b border-white/5 bg-white/[0.02] flex items-center justify-between">
+            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.15em]">
+              Commands
+            </span>
+            <span className="text-[9px] text-gray-500 font-medium px-1.5 py-0.5 rounded border border-white/5 bg-white/5">
+              ESC to close
+            </span>
+          </div>
+          <div className="max-h-80 overflow-y-auto py-2 no-scrollbar">
+            {filteredCommands.map((cmd, idx) => {
+              const Icon = cmd.icon;
+              const isActive = idx === commandIndex;
+              return (
+                <button
+                  key={cmd.id}
+                  onClick={() => {
+                    setMessage(`/${cmd.id} `);
+                    setShowCommands(false);
+                    textareaRef.current?.focus();
+                  }}
+                  onMouseEnter={() => setCommandIndex(idx)}
+                  className={cn(
+                    "w-full flex items-center gap-3.5 px-4 py-2.5 transition-all duration-200 text-left relative group",
+                    isActive
+                      ? "bg-white/[0.04] border-l-2 border-accent"
+                      : "text-gray-400 hover:bg-white/[0.02] border-l-2 border-transparent",
+                  )}
+                >
+                  <div
+                    className={cn(
+                      "w-8 h-8 rounded-xl flex items-center justify-center shrink-0 transition-all duration-200 shadow-inner",
+                      isActive
+                        ? cn(cmd.bg, cmd.color, "scale-105")
+                        : "bg-white/5 text-gray-500",
+                    )}
+                  >
+                    <Icon size={16} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <span
+                        className={cn(
+                          "text-sm font-bold transition-colors",
+                          isActive ? "text-white" : "text-gray-300",
+                        )}
+                      >
+                        /{cmd.label}
+                      </span>
+                      {isActive && (
+                        <div className="flex items-center gap-1 animate-in fade-in slide-in-from-right-1">
+                          <span className="text-[9px] text-gray-500 font-bold uppercase tracking-wider bg-white/5 px-1.5 py-0.5 rounded border border-white/10">
+                            TAB
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    <span
+                      className={cn(
+                        "text-[10px] truncate block mt-0.5 font-medium transition-colors",
+                        isActive ? "text-gray-400" : "text-gray-500",
+                      )}
+                    >
+                      {cmd.desc}
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -230,8 +527,16 @@ export function ChatInput() {
           ref={textareaRef}
           value={message}
           onChange={(e) => {
-            setMessage(e.target.value);
+            const val = e.target.value;
+            setMessage(val);
             handleTyping();
+
+            if (val.startsWith("/") && !val.includes(" ")) {
+              setShowCommands(true);
+              setCommandIndex(0);
+            } else {
+              setShowCommands(false);
+            }
           }}
           onKeyDown={handleKeyDown}
           placeholder={`Message #${activeGroupId!.slice(-4)}`}
@@ -243,7 +548,7 @@ export function ChatInput() {
     focus-visible:outline-none focus-visible:ring-0
     text-gray-200 placeholder:text-gray-600
     resize-none py-2.5 text-sm leading-relaxed
-    scrollbar-thin scrollbar-thumb-white/10
+    no-scrollbar
   "
           rows={1}
           disabled={isUploading}

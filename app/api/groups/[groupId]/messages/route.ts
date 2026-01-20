@@ -39,19 +39,30 @@ export async function GET(
       .limit(limit);
 
     return NextResponse.json({
-      messages: messages.reverse().map((m) => ({
-        _id: m._id.toString(),
-        groupId: m.group.toString(),
-        userId: m.sender._id.toString(),
-        userName: (m.sender as any).name,
-        userAvatar: (m.sender as any).avatar,
-        content: m.content,
-        type: m.type,
-        fileUrl: m.fileMeta?.url,
-        fileName: m.fileMeta?.name,
-        fileSize: m.fileMeta?.size,
-        createdAt: m.createdAt,
-      })),
+      messages: messages.reverse().map((m: any) => {
+        const isSystem =
+          m.sender?.toString() === "000000000000000000000000" || !m.sender;
+        return {
+          _id: m._id.toString(),
+          groupId: m.group.toString(),
+          userId: isSystem
+            ? "ai-system"
+            : m.sender?._id?.toString() || "deleted-user",
+          userName: isSystem
+            ? "signalDesk"
+            : (m.sender as any)?.name || "Deleted User",
+          userAvatar: isSystem
+            ? "https://api.dicebear.com/7.x/bottts/svg?seed=signaldesk"
+            : (m.sender as any)?.avatar ||
+              `https://api.dicebear.com/7.x/initials/svg?seed=${m.sender?._id || "unknown"}`,
+          content: m.content,
+          type: m.type,
+          fileUrl: m.fileMeta?.url,
+          fileName: m.fileMeta?.name,
+          fileSize: m.fileMeta?.size,
+          createdAt: m.createdAt,
+        };
+      }),
     });
   } catch (error: any) {
     console.error("Get messages error:", error);

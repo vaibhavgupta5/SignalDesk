@@ -1,7 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, LogOut, Settings, UserPlus, Pencil } from "lucide-react";
+import {
+  Plus,
+  LogOut,
+  Settings,
+  UserPlus,
+  Pencil,
+  ClipboardCheck,
+} from "lucide-react";
 import { useProjectStore } from "@/store/projectStore";
 import { useUIStore } from "@/store/uiStore";
 import { useAuthStore } from "@/store/authStore";
@@ -155,7 +162,15 @@ export function SidebarProjects() {
           </div>
         </ScrollArea>
 
-        <div className="mt-auto pt-4 flex flex-col items-center w-full border-t border-base-border/50">
+        <div className="mt-auto pt-4 flex flex-col items-center gap-4 w-full border-t border-base-border/50">
+          <button
+            onClick={() => router.push("/context-store")}
+            className="w-10 h-10 rounded-xl hover:bg-white/5 text-text-muted flex items-center justify-center transition-all duration-200"
+            title="Context Store"
+          >
+            <ClipboardCheck size={18} />
+          </button>
+
           <button
             onClick={handleLogout}
             className="w-10 h-10 rounded-xl hover:bg-red-500/10 hover:text-red-500 text-text-muted flex items-center justify-center transition-all duration-200"

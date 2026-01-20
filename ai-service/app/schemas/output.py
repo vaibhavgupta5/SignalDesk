@@ -27,6 +27,7 @@ class ClassifiedMessage(BaseModel):
     timestamp: Optional[str] = None
     type: List[MessageType] = Field(description="One or more classification types")
     confidence: ConfidenceScore
+    metadata: Optional[dict] = None
 
 
 class ClassifyOut(BaseModel):

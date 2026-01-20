@@ -53,6 +53,24 @@ body {
   .scrollbar-thin::-webkit-scrollbar-thumb:hover {
     background-color: #2e2e38;
   }
+
+  .no-scrollbar {
+    -ms-overflow-style: none; /* IE and Edge */
+    scrollbar-width: none; /* Firefox */
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none; /* Chrome, Safari and Opera */
+  }
+
+  /* Global scrollbar removal for whole app if desired */
+  * {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  *::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 .transition-all-smooth {

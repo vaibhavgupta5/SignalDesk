@@ -17,17 +17,20 @@ export interface Message {
 interface ChatState {
   messages: Record<string, Message[]>;
   typingUsers: Record<string, string[]>;
+  aiProcessing: Record<string, boolean>;
 
   addMessage: (groupId: string, message: Message) => void;
   setMessages: (groupId: string, messages: Message[]) => void;
   prependMessages: (groupId: string, messages: Message[]) => void;
   setTyping: (groupId: string, userId: string, isTyping: boolean) => void;
+  setAIProcessing: (groupId: string, isProcessing: boolean) => void;
   clearMessages: (groupId: string) => void;
 }
 
 export const useChatStore = create<ChatState>((set) => ({
   messages: {},
   typingUsers: {},
+  aiProcessing: {},
 
   addMessage: (groupId, message) =>
     set((state) => ({
@@ -67,6 +70,14 @@ export const useChatStore = create<ChatState>((set) => ({
         },
       };
     }),
+
+  setAIProcessing: (groupId, isProcessing) =>
+    set((state) => ({
+      aiProcessing: {
+        ...state.aiProcessing,
+        [groupId]: isProcessing,
+      },
+    })),
 
   clearMessages: (groupId) =>
     set((state) => {
