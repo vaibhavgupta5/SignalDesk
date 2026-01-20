@@ -74,10 +74,15 @@ Return a JSON object with extracted fields:
     def parse_response(self, response: dict) -> List[dict]:
         """Parse LLM response into extraction results"""
         text = response.get("response", "{}")
+        from app.services.base import logger
+        logger.debug(f"Parsing extractor response: {text}")
         parsed = self.parse_json(text)
         
         if parsed and "extracted" in parsed:
+            logger.info(f"Successfully parsed {len(parsed['extracted'])} entities from LLM")
             return parsed["extracted"]
+        
+        logger.warning(f"No 'extracted' key found in response: {parsed}")
         return []
     
     async def extract(
@@ -86,6 +91,8 @@ Return a JSON object with extracted fields:
         context: Optional[ContextIn] = None
     ) -> ExtractOut:
         """Extract structured data from messages"""
+        from app.services.base import logger
+        logger.info(f"Extracting entities from {len(messages)} messages")
         
         # Build prompt and query LLM
         user_prompt = self.build_user_prompt(messages, context)
@@ -96,25 +103,34 @@ Return a JSON object with extracted fields:
         
         # Build output
         items = []
-        for ext in extractions:
+        for i, ext in enumerate(extractions):
             try:
+                score = normalize_confidence(float(ext.get("confidence", 0.5)))
+                key = ext.get("key", "unknown")
+                val = ext.get("value", "")
+                
+                logger.debug(f"Entity {i} extracted: {key}={val} (score {score})")
+                
                 items.append(
                     ExtractedField(
-                        key=ext.get("key", "unknown"),
-                        value=ext.get("value", ""),
+                        key=key,
+                        value=val,
                         confidence=ConfidenceScore(
-                            score=normalize_confidence(float(ext.get("confidence", 0.5))),
+                            score=score,
                             reason=ext.get("reason", "LLM extraction")
                         )
                     )
                 )
-            except Exception:
+            except Exception as e:
+                logger.error(f"Error parsing single extraction {i}: {e}")
                 continue
         
         # If no extractions, try fallback
         if not items:
+            logger.info("LLM returned no entities, triggering keyword-based fallback extraction")
             combined = " ".join([m.message for m in messages])
             items = self._fallback_extract(combined)
+            logger.info(f"Fallback extraction found {len(items)} entities")
         
         return ExtractOut(
             items=items,

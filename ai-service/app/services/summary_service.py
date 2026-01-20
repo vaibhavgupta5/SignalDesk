@@ -67,15 +67,20 @@ Return a JSON object:
     def parse_response(self, response: dict) -> dict:
         """Parse LLM response into summary result"""
         text = response.get("response", "{}")
+        from app.services.base import logger
+        logger.debug(f"Parsing summary response: {text}")
         parsed = self.parse_json(text)
         
         if parsed:
-            return {
+            result = {
                 "summary": parsed.get("summary", ""),
                 "key_points": parsed.get("key_points", []),
                 "confidence": parsed.get("confidence", 0.7)
             }
+            logger.info("Successfully parsed summary from LLM")
+            return result
         
+        logger.warning(f"Failed to parse summary JSON from: {text}")
         return {}
     
     async def summarize(
@@ -84,6 +89,8 @@ Return a JSON object:
         context: Optional[ContextIn] = None
     ) -> SummarizeOut:
         """Generate summary of messages"""
+        from app.services.base import logger
+        logger.info(f"Summarizing {len(messages)} messages")
         
         # Build prompt and query LLM
         user_prompt = self.build_user_prompt(messages, context)
@@ -97,8 +104,10 @@ Return a JSON object:
             key_points = result.get("key_points", [])
             confidence = float(result.get("confidence", 0.75))
             reason = "LLM-generated summary"
+            logger.debug(f"LLM Summary: {summary[:100]}...")
         else:
             # Fallback
+            logger.info("LLM summary failed, triggering fallback summarization")
             result = self._fallback_summarize(messages)
             summary = result["summary"]
             key_points = result["key_points"]

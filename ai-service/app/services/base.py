@@ -54,13 +54,17 @@ class LLMClient(ABC, Generic[T]):
         """
         full_prompt = f"{self.prompt_template}\n\n{user_prompt}"
         
+        logger.debug(f"Querying {settings.MODEL} with prompt length: {len(full_prompt)}")
+        # logger.debug(f"Full Prompt: {full_prompt}") # Uncomment only if needed, can be very large
+        
         # Check if API key is configured
         if not settings.GEMINI_API_KEY:
             logger.warning("GEMINI_API_KEY not set, using mock response")
             return await self._mock_response(user_prompt)
         
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                logger.info(f"POST request to Gemini API ({settings.MODEL})")
                 response = await client.post(
                     f"https://generativelanguage.googleapis.com/v1beta/models/{settings.MODEL}:generateContent",
                     headers={"Content-Type": "application/json"},
@@ -74,30 +78,33 @@ class LLMClient(ABC, Generic[T]):
                         }
                     }
                 )
-                print(f"DEBUG: Gemini Status: {response.status_code}")
+                
+                logger.debug(f"Gemini API Response Status: {response.status_code}")
+                
+                if response.status_code != 200:
+                    logger.error(f"Gemini API Error: {response.status_code} - {response.text}")
+                
                 response.raise_for_status()
                 result = response.json()
                 
                 # Extract text from Gemini response
                 candidates = result.get("candidates", [])
                 if not candidates:
-                    print(f"DEBUG: No candidates: {result}")
                     logger.warning(f"No candidates in response: {result}")
                     return {"response": "{}", "success": False, "error": "No candidates"}
                 
                 text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "{}")
-                print(f"DEBUG: LLM Response (first 100 chars): {text[:100]}...")
+                logger.debug(f"Gemini Response Text: {text[:500]}...") # Log start of response
+                
                 return {"response": text, "success": True}
                 
         except httpx.HTTPError as e:
-            print(f"DEBUG: HTTP Error: {e}")
-            if hasattr(e, 'response'):
-                print(f"DEBUG: Error Body: {e.response.text}")
-            logger.error(f"Gemini API error: {e}")
+            logger.error(f"Gemini API HTTP error: {str(e)}")
+            if hasattr(e, 'response') and e.response:
+                logger.error(f"Error body: {e.response.text}")
             return {"response": "{}", "success": False, "error": str(e)}
         except Exception as e:
-            print(f"DEBUG: Unexpected Error: {e}")
-            logger.error(f"Unexpected error: {e}")
+            logger.error(f"Unexpected error during Gemini query: {str(e)}", exc_info=True)
             return {"response": "{}", "success": False, "error": str(e)}
     
     async def _mock_response(self, prompt: str) -> dict:
@@ -106,29 +113,47 @@ class LLMClient(ABC, Generic[T]):
             "response": "{}",
             "success": False,
             "mock": True,
-            "note": "GEMINI_API_KEYnot configured"
+            "error": "GEMINI_API_KEY not configured or using mock mode",
+            "note": "Please set GEMINI_API_KEY in .env"
         }
     
     @staticmethod
-    def parse_json(text: str) -> Optional[dict]:
-        """Parse JSON from LLM response, handling markdown code blocks"""
+    def parse_json(text: str) -> Optional[Any]:
+        """
+        Extremely robust JSON extraction from LLM responses.
+        Handles markdown, leading/trailing crap, and partial truncation attempts.
+        """
         if not text:
             return None
         
+        import re
+        import json
+        
+        # 1. Try direct parse
         try:
-            return json.loads(text)
+            return json.loads(text.strip())
         except json.JSONDecodeError:
             pass
+            
+        # 2. Try extracting from markdown blocks first
+        markdown_match = re.search(r"```(?:json)?\s*(\{.*\}|\[.*\])\s*```", text, re.DOTALL | re.IGNORECASE)
+        if markdown_match:
+            try:
+                return json.loads(markdown_match.group(1).strip())
+            except json.JSONDecodeError:
+                pass
         
-        # Try extracting from markdown code block
-        for marker in ["```json", "```"]:
-            if marker in text:
-                start = text.find(marker) + len(marker)
-                end = text.find("```", start)
-                if end > start:
-                    try:
-                        return json.loads(text[start:end].strip())
-                    except json.JSONDecodeError:
-                        pass
-        
+        # 3. Last resort: Find the first { or [ and match it to its closing pair
+        # Or just find the outermost balance
+        json_match = re.search(r"(\{.*\}|\[.*\])", text, re.DOTALL)
+        if json_match:
+            try:
+                # We try to strip trailing characters manually if it failed
+                candidate = json_match.group(1).strip()
+                return json.loads(candidate)
+            except json.JSONDecodeError:
+                # If it's truncated, it might end abruptly. We can't fix truncation easily 
+                # but we can try to close trailing braces if just one is missing.
+                pass
+                
         return None

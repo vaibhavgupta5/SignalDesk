@@ -85,6 +85,8 @@ Return a JSON object:
         messages: List[ChatMessage]
     ) -> List[FilterResult]:
         """Filter messages to identify useful vs noise"""
+        from app.services.base import logger
+        logger.info(f"Filtering {len(messages)} messages for signal vs noise")
         
         # Build prompt and query LLM
         user_prompt = self.build_user_prompt(messages)
@@ -98,7 +100,7 @@ Return a JSON object:
         for i, msg in enumerate(messages):
             # Find matching result
             result = next(
-                (r for r in results if r.get("index") == i),
+                (r for r in results if str(r.get("index")) == str(i)),
                 None
             )
             
@@ -106,9 +108,11 @@ Return a JSON object:
                 useful = result.get("useful", True)
                 reason = result.get("reason", "LLM classification")
                 confidence = float(result.get("confidence", 0.7))
+                logger.debug(f"Msg {i} filtered by LLM: useful={useful} ({reason})")
             else:
                 # Fallback
                 useful, reason, confidence = self._fallback_filter(msg.message)
+                logger.debug(f"Msg {i} using fallback filter: useful={useful}")
             
             filter_results.append(
                 FilterResult(
@@ -119,6 +123,8 @@ Return a JSON object:
                 )
             )
         
+        useful_count = sum(1 for r in filter_results if r.useful)
+        logger.info(f"Filtering complete: {useful_count}/{len(messages)} messages marked as useful")
         return filter_results
     
     async def filter_single(self, text: str) -> FilterResult:

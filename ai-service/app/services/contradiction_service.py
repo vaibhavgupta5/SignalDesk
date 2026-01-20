@@ -87,14 +87,18 @@ Return a JSON object:
     def parse_response(self, response: dict) -> Tuple[List[dict], bool, str]:
         """Parse LLM response into contradiction results"""
         text = response.get("response", "{}")
+        from app.services.base import logger
+        logger.debug(f"Parsing contradiction response: {text}")
         parsed = self.parse_json(text)
         
         if parsed:
             contradictions = parsed.get("contradictions", [])
             is_consistent = parsed.get("is_consistent", True)
             reasoning = parsed.get("reasoning", "")
+            logger.info(f"LLM found {len(contradictions)} potential contradictions. Consistent: {is_consistent}")
             return contradictions, is_consistent, reasoning
         
+        logger.warning(f"Failed to parse contradiction JSON from: {text}")
         return [], True, ""
     
     async def detect(
@@ -103,6 +107,8 @@ Return a JSON object:
         context: Optional[ContextIn] = None
     ) -> ContradictOut:
         """Detect contradictions in messages given prior context"""
+        from app.services.base import logger
+        logger.info(f"Detecting contradictions in batch of {len(messages)} messages")
         
         # Build prompt and query LLM
         user_prompt = self.build_user_prompt(messages, context)
@@ -113,28 +119,37 @@ Return a JSON object:
         
         # Build output
         contradictions = []
-        for item in contradiction_data:
+        for i, item in enumerate(contradiction_data):
             try:
+                score = normalize_confidence(float(item.get("confidence", 0.5)))
+                claim_a = item.get("new_claim", "")
+                claim_b = item.get("prior_claim", "")
+                
+                logger.debug(f"Contradiction {i} detected: '{claim_a}' vs '{claim_b}' (score {score})")
+                
                 contradictions.append(
                     Contradiction(
-                        claim_a=item.get("new_claim", ""),
-                        claim_b=item.get("prior_claim", ""),
+                        claim_a=claim_a,
+                        claim_b=claim_b,
                         severity=item.get("severity", "medium"),
                         confidence=ConfidenceScore(
-                            score=normalize_confidence(float(item.get("confidence", 0.5))),
+                            score=score,
                             reason=item.get("type", "LLM detection")
                         ),
                         explanation=item.get("explanation", "Potential contradiction")
                     )
                 )
-            except Exception:
+            except Exception as e:
+                logger.error(f"Error parsing contradiction item {i}: {e}")
                 continue
         
         # If LLM failed, try fallback
         if not response.get("success", False) and context:
+            logger.info("LLM query failed for contradiction, triggering fallback detection")
             combined = " ".join([m.message for m in messages])
             fallback_contradictions, fallback_consistent = self._fallback_detect(combined, context)
             if fallback_contradictions:
+                logger.info(f"Fallback found {len(fallback_contradictions)} potential contradictions")
                 contradictions = fallback_contradictions
                 is_consistent = fallback_consistent
         

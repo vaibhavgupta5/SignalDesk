@@ -16,8 +16,8 @@ class ClassifierService(LLMClient[ClassifyOut]):
     def __init__(self):
         super().__init__(
             prompt_file="classifier.txt",
-            temperature=0.2,
-            max_tokens=2048
+            temperature=0.1,
+            max_tokens=4096
         )
     
     def build_user_prompt(
@@ -77,10 +77,28 @@ Return a JSON array with one object per message:
     def parse_response(self, response: dict) -> List[dict]:
         """Parse LLM response into classification results"""
         text = response.get("response", "{}")
+        from app.services.base import logger
+        logger.debug(f"Parsing classifier response text: {text}")
         parsed = self.parse_json(text)
         
-        if parsed and "classifications" in parsed:
-            return parsed["classifications"]
+        if not parsed:
+            logger.warning("LLM response could not be parsed as JSON")
+            return []
+
+        # Robust extraction: handle both {"classifications": [...]} and [...]
+        results = []
+        if isinstance(parsed, dict):
+            results = parsed.get("classifications", [])
+            if not results and "extracted" in parsed: # Sometimes LLM confuses keys
+                results = parsed.get("extracted", [])
+        elif isinstance(parsed, list):
+            results = parsed
+
+        if results:
+            logger.info(f"Successfully parsed {len(results)} classifications from LLM")
+            return results
+        
+        logger.warning(f"No valid classification list found in parsed result: {parsed}")
         return []
     
     async def classify(
@@ -89,6 +107,8 @@ Return a JSON array with one object per message:
         context: Optional[ContextIn] = None
     ) -> ClassifyOut:
         """Classify messages into signal categories"""
+        from app.services.base import logger
+        logger.info(f"Classifying batch of {len(messages)} messages")
         
         # Build prompt and query LLM
         user_prompt = self.build_user_prompt(messages, context)
@@ -99,32 +119,54 @@ Return a JSON array with one object per message:
         
         # Build output with fallback
         classified_messages = []
+        llm_error = response.get("error") if not response.get("success") else None
+        
         for i, msg in enumerate(messages):
-            # Find matching classification
-            classification = next(
-                (c for c in classifications if c.get("index") == i),
-                None
-            )
+            # Find matching classification (robust to string vs int index)
+            classification = None
+            if isinstance(classifications, list):
+                # Search by index field
+                classification = next(
+                    (c for c in classifications if str(c.get("index")) == str(i)),
+                    None
+                )
             
             if classification:
-                types = classification.get("types", ["SUGGESTION"])
+                # Support multiple key names commonly used by LLMs
+                raw_types = classification.get("types", classification.get("type", classification.get("category", [])))
+                if isinstance(raw_types, str):
+                    raw_types = [raw_types]
+                
                 confidence = float(classification.get("confidence", 0.7))
                 reason = classification.get("reason", "LLM classification")
+                logger.debug(f"Msg {i} matched LLM result: {raw_types}")
             else:
                 # Fallback to keyword-based
-                types, confidence = self._fallback_classify(msg.message)
+                raw_types, confidence = self._fallback_classify(msg.message)
                 reason = "Fallback keyword classification"
+                if llm_error:
+                    reason += f" (LLM failure: {llm_error})"
+                else:
+                    reason += " (No LLM match for index)"
+                logger.info(f"Msg {i} using fallback. LLM Error: {llm_error}")
             
             # Convert to MessageType enums
             message_types = []
-            for t in types:
+            for t in raw_types:
                 try:
-                    message_types.append(MessageType[t.upper()])
-                except KeyError:
+                    t_clean = str(t).upper().strip().replace(" ", "_")
+                    # Handle common synonyms
+                    if t_clean == "RESOLVED": t_clean = "DECISION"
+                    if t_clean == "TASK": t_clean = "ACTION"
+                    
+                    message_types.append(MessageType[t_clean])
+                except (KeyError, AttributeError):
+                    logger.warning(f"Unknown type '{t}' for Msg {i}")
                     pass
             
             if not message_types:
-                message_types = [MessageType.SUGGESTION]
+                # If conversion failed, try mapping or default to OTHER
+                message_types = [MessageType.OTHER]
             
             classified_messages.append(
                 ClassifiedMessage(
@@ -139,9 +181,14 @@ Return a JSON array with one object per message:
                 )
             )
         
+        explanation = f"Classified {len(classified_messages)} message(s)"
+        if llm_error:
+            explanation += f" [LLM Note: {llm_error}]"
+        
+        logger.info(f"Final Batch Consistency Check: {len(classified_messages)}/{len(messages)}")
         return ClassifyOut(
             messages=classified_messages,
-            explanation=f"Classified {len(classified_messages)} message(s)"
+            explanation=explanation
         )
     
     def _fallback_classify(self, text: str) -> tuple:
@@ -150,27 +197,27 @@ Return a JSON array with one object per message:
         types = []
         
         # Decision Markers
-        if any(w in text_lower for w in ["decided", "choose", "go with", "confirmed", "agreed", "settled on", "final", "approved"]):
+        if any(w in text_lower for w in ["decided", "choose", "go with", "confirmed", "agreed", "settled on", "final", "approved", "decision", "resolv", "finalize"]):
             types.append("DECISION")
         
         # Action Markers
-        if any(w in text_lower for w in ["will do", "implement", "build", "create", "complete", "finish", "deliver", "ship", "send", "deploy", "by tomorrow"]):
+        if any(w in text_lower for w in ["will do", "implement", "build", "create", "complete", "finish", "deliver", "ship", "send", "deploy", "by tomorrow", "task", "follow up"]):
             types.append("ACTION")
         
         # Assumption Markers
-        if any(w in text_lower for w in ["assume", "assuming", "probably", "think", "believe", "expect", "likely", "should be", "guess"]):
+        if any(w in text_lower for w in ["assume", "assuming", "probably", "think", "believe", "expect", "likely", "should be", "guess", "trust"]):
             types.append("ASSUMPTION")
         
         # Suggestion Markers
-        if any(w in text_lower for w in ["suggest", "maybe", "consider", "could", "might", "try", "what if", "how about", "perhaps"]):
+        if any(w in text_lower for w in ["suggest", "maybe", "consider", "could", "might", "try", "what if", "how about", "perhaps", "proposal", "idea"]):
             types.append("SUGGESTION")
         
         # Constraint Markers
-        if any(w in text_lower for w in ["must", "should", "have to", "need to", "required", "cannot", "can't", "limit", "restriction"]):
+        if any(w in text_lower for w in ["must", "should", "have to", "need to", "required", "cannot", "can't", "limit", "restriction", "mandatory", "never", "only"]):
             types.append("CONSTRAINT")
 
         # Question Markers
-        if "?" in text_lower or any(w in text_lower for w in ["how", "why", "when", "who", "what", "where"]):
+        if "?" in text_lower or any(w in text_lower for w in ["how", "why", "when", "who", "what", "where", "whether", "if "]):
             types.append("QUESTION")
         
         if not types:
