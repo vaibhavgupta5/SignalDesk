@@ -1,0 +1,29 @@
+{
+  "messages": [
+    {
+      "user": "Tulls",
+      "message": "Complete this by tomorrow",
+      "timestamp": "2024-01-19T10:00:00Z"
+    },
+    {
+      "user": "Alice",
+      "message": "We decided to use Python",
+      "timestamp": "2024-01-19T10:05:00Z"
+    },
+    {
+      "user": "Bob",
+      "message": "I think we should add tests, maybe using pytest",
+      "timestamp": "2024-01-19T10:10:00Z"
+    },
+    {
+      "user": "Charlie",
+      "message": "We must have error handling in place",
+      "timestamp": "2024-01-19T10:15:00Z"
+    }
+  ],
+  "context": {
+    "prior_decisions": ["Use FastAPI"],
+    "prior_actions": ["Set up project structure"],
+    "prior_constraints": ["Deploy by Friday"]
+  }
+}
