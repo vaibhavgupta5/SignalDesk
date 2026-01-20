@@ -1,7 +1,12 @@
 version: '3.8'
 services:
-  api:
+  ai-api:
     build: .
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    container_name: signaldesk-ai-local
+    restart: unless-stopped
     ports:
-      - 8000:8000
+      - "${PORT:-8000}:8000"
+    env_file:
+      - .env
+    environment:
+      - PORT=8000
