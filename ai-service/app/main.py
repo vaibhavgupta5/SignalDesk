@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 import uvicorn
-from app.api import classify, extract, contradict, summarize, health
+from app.api import classify, extract, contradict, summarize, ask, health
 from app.config.logging import configure_logging
 
 configure_logging()
@@ -11,6 +11,7 @@ app.include_router(classify.router, prefix="/ai")
 app.include_router(extract.router, prefix="/ai")
 app.include_router(contradict.router, prefix="/ai")
 app.include_router(summarize.router, prefix="/ai")
+app.include_router(ask.router, prefix="/ai")
 app.include_router(health.router, prefix="/ai")
 
 

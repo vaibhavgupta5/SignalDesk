@@ -42,3 +42,10 @@ class SummarizeRequest(BaseModel):
     """Summarize messages concisely"""
     messages: List[ChatMessage]
     context: Optional[ContextIn] = None
+
+
+class AskRequest(BaseModel):
+    """Ask a specific question or query a category from messages"""
+    query_type: str  # e.g., "DECISION", "ACTION", etc.
+    messages: List[ChatMessage]
+    context: Optional[ContextIn] = None

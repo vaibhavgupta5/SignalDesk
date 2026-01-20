@@ -68,3 +68,16 @@ class SummarizeOut(BaseModel):
     summary: str
     key_points: List[str] = []
     confidence: ConfidenceScore
+
+
+class AskItem(BaseModel):
+    text: str
+    user: str
+    confidence: ConfidenceScore
+
+
+class AskOut(BaseModel):
+    """Result of Ask query"""
+    items: List[AskItem]
+    query_type: str
+    ai_insight: Optional[str] = Field(None, description="AI's own analysis or additional suggestions based on the query type")

@@ -16,8 +16,8 @@ class SummaryService(LLMClient[SummarizeOut]):
     def __init__(self):
         super().__init__(
             prompt_file="summary.txt",
-            temperature=0.3,
-            max_tokens=512
+            temperature=0.2,
+            max_tokens=1024
         )
     
     def build_user_prompt(
@@ -71,16 +71,29 @@ Return a JSON object:
         logger.debug(f"Parsing summary response: {text}")
         parsed = self.parse_json(text)
         
-        if parsed:
+        if not parsed:
+            logger.warning(f"Failed to parse summary JSON from: {text}")
+            return {}
+
+        # If it's a list, take the first item if it's a dict
+        if isinstance(parsed, list) and len(parsed) > 0:
+            parsed = parsed[0]
+            
+        if isinstance(parsed, dict):
+            # Try potential keys
+            summary = parsed.get("summary", parsed.get("text", parsed.get("conclusion", "")))
+            key_points = parsed.get("key_points", parsed.get("points", parsed.get("bullets", [])))
+            confidence = parsed.get("confidence", 0.7)
+            
             result = {
-                "summary": parsed.get("summary", ""),
-                "key_points": parsed.get("key_points", []),
-                "confidence": parsed.get("confidence", 0.7)
+                "summary": summary,
+                "key_points": key_points,
+                "confidence": confidence
             }
-            logger.info("Successfully parsed summary from LLM")
+            logger.info("Successfully parsed summary result from LLM")
             return result
         
-        logger.warning(f"Failed to parse summary JSON from: {text}")
+        logger.warning(f"Parsed JSON is not a dict: {type(parsed)}")
         return {}
     
     async def summarize(
