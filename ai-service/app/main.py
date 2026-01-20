@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from fastapi.middleware.cors import CORSMiddleware
 from app.api import classify, action, contradict, summarize, ask, health
@@ -8,10 +9,10 @@ configure_logging()
 
 app = FastAPI(title="SignalDesk AI")
 
-# Implement CORS
+# CORS Configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # Allow all origins for local dev
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

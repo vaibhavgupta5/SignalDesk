@@ -33,6 +33,6 @@ const UserSchema = new Schema({
   },
 });
 
-UserSchema.index({ email: 1 });
+// Email index is auto-handled by unique: true
 
 export const User = models.User || mongoose.model("User", UserSchema);

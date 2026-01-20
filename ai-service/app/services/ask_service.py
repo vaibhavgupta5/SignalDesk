@@ -25,6 +25,7 @@ class AskService(LLMClient[AskOut]):
         self,
         category: str,
         messages: List[ChatMessage],
+        query: Optional[str] = None,
         context: Optional[ContextIn] = None
     ) -> str:
         """Build the ask prompt"""
@@ -50,6 +51,7 @@ class AskService(LLMClient[AskOut]):
         return self.prompt_template.format(
             category=clean_category,
             messages=conversation,
+            query=query or "None",
             context=context_str
         )
     
@@ -74,6 +76,7 @@ class AskService(LLMClient[AskOut]):
         self,
         category: str,
         messages: List[ChatMessage],
+        query: Optional[str] = None,
         context: Optional[ContextIn] = None
     ) -> AskOut:
         """Query for items matching category"""
@@ -84,7 +87,7 @@ class AskService(LLMClient[AskOut]):
             
         logger.info(f"Asking for {mapped_category} (original: {category}) in {len(messages)} messages")
         
-        user_prompt = self.build_user_prompt(mapped_category, messages, context)
+        user_prompt = self.build_user_prompt(mapped_category, messages, query, context)
         response = await self.query(user_prompt)
         
         items_data, ai_insight = self.parse_response(response)

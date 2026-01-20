@@ -121,7 +121,7 @@ class LLMClient(ABC, Generic[T]):
     def parse_json(text: str) -> Optional[Any]:
         """
         Extremely robust JSON extraction from LLM responses.
-        Handles markdown, leading/trailing crap, and partial truncation attempts.
+        Handles markdown, leading/trailing crap, and logs specific errors.
         """
         if not text:
             return None
@@ -129,31 +129,48 @@ class LLMClient(ABC, Generic[T]):
         import re
         import json
         
+        cleaned_text = text.strip()
+        
         # 1. Try direct parse
         try:
-            return json.loads(text.strip())
-        except json.JSONDecodeError:
-            pass
+            return json.loads(cleaned_text)
+        except json.JSONDecodeError as e:
+            logger.debug(f"Direct JSON parse failed: {str(e)}")
             
-        # 2. Try extracting from markdown blocks first
-        markdown_match = re.search(r"```(?:json)?\s*(\{.*\}|\[.*\])\s*```", text, re.DOTALL | re.IGNORECASE)
+        # 2. Try extracting from markdown blocks
+        markdown_match = re.search(r"```(?:json)?\s*(\{.*\}|\[.*\])\s*```", cleaned_text, re.DOTALL | re.IGNORECASE)
         if markdown_match:
             try:
                 return json.loads(markdown_match.group(1).strip())
-            except json.JSONDecodeError:
-                pass
+            except json.JSONDecodeError as e:
+                logger.debug(f"Markdown JSON parse failed: {str(e)}")
         
-        # 3. Last resort: Find the first { or [ and match it to its closing pair
-        # Or just find the outermost balance
-        json_match = re.search(r"(\{.*\}|\[.*\])", text, re.DOTALL)
-        if json_match:
-            try:
-                # We try to strip trailing characters manually if it failed
-                candidate = json_match.group(1).strip()
-                return json.loads(candidate)
-            except json.JSONDecodeError:
-                # If it's truncated, it might end abruptly. We can't fix truncation easily 
-                # but we can try to close trailing braces if just one is missing.
-                pass
+        # 3. Find outermost balance (handles text before/after JSON)
+        try:
+            start_idx = cleaned_text.find('{')
+            if start_idx == -1:
+                start_idx = cleaned_text.find('[')
+            
+            if start_idx != -1:
+                # Find matching end
+                bracket_type = cleaned_text[start_idx]
+                close_type = '}' if bracket_type == '{' else ']'
                 
+                # Simple balanced bracket search
+                stack = 0
+                for i in range(start_idx, len(cleaned_text)):
+                    if cleaned_text[i] == bracket_type:
+                        stack += 1
+                    elif cleaned_text[i] == close_type:
+                        stack -= 1
+                        if stack == 0:
+                            candidate = cleaned_text[start_idx:i+1]
+                            try:
+                                return json.loads(candidate)
+                            except json.JSONDecodeError as e:
+                                logger.warning(f"Balanced segment parse failed at index {i}: {str(e)}")
+                                # Continue search if this wasn't the "real" end or if multiple JSONs
+        except Exception as e:
+            logger.error(f"Error during bracket matching: {str(e)}")
+
         return None

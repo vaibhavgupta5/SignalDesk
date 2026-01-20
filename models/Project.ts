@@ -37,7 +37,6 @@ const ProjectSchema = new Schema({
   },
 });
 
-ProjectSchema.index({ projectId: 1 });
 ProjectSchema.index({ owner: 1 });
 
 export const Project =

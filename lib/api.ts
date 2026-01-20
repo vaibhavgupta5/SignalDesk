@@ -1,6 +1,8 @@
 import axios from "axios";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+const AI_SERVICE_URL =
+  process.env.NEXT_PUBLIC_AI_API_URL || "http://localhost:8000";
 
 export const apiClient = axios.create({
   baseURL: `${API_URL}/api`,
@@ -73,4 +75,29 @@ export const messageAPI = {
       headers: { "Content-Type": "multipart/form-data" },
     });
   },
+};
+
+export const aiAPI = {
+  classify: (messages: any[], context?: any) =>
+    axios.post(`${AI_SERVICE_URL}/ai/classify`, { messages, context }),
+  ask: (query_type: string, messages: any[], query?: string, context?: any) =>
+    axios.post(`${AI_SERVICE_URL}/ai/ask`, {
+      query_type,
+      messages,
+      query,
+      context,
+    }),
+  action: (messages: any[], context?: any) =>
+    axios.post(`${AI_SERVICE_URL}/ai/action`, { messages, context }),
+  contradict: (messages: any[], context?: any) =>
+    axios.post(`${AI_SERVICE_URL}/ai/contradict`, { messages, context }),
+};
+
+export const contextAPI = {
+  getAll: (params?: { category?: string; groupId?: string; limit?: number }) =>
+    apiClient.get("/context", { params }),
+};
+
+export const summaryAPI = {
+  get: (groupId: string) => apiClient.get("/summary", { params: { groupId } }),
 };

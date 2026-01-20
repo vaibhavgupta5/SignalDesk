@@ -177,7 +177,8 @@ Return a JSON array with one object per message:
                     confidence=ConfidenceScore(
                         score=normalize_confidence(confidence),
                         reason=reason
-                    )
+                    ),
+                    metadata=msg.metadata
                 )
             )
         

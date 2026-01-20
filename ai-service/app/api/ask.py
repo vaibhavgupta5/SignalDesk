@@ -15,6 +15,7 @@ async def ask_query(request: AskRequest):
         result = await ask_service.ask(
             category=request.query_type,
             messages=request.messages,
+            query=request.query,
             context=request.context
         )
         return result

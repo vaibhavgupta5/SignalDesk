@@ -26,12 +26,14 @@ CATEGORIES AND THEIR DEFINITIONS:
 
 INPUT:
 - REQUESTED CATEGORY: {category}
+- SPECIFIC USER QUERY: {query}
 - CONVERSATION HISTORY: {messages}
 - PRIOR CONTEXT: {context}
 
 TASK:
-1. Identify every message or specific part of a message that fits the REQUESTED CATEGORY. Be precise.
-2. In the "ai_insight" field, provide additional value:
+1. Identify every message or specific part of a message that fits the REQUESTED CATEGORY. 
+2. If a SPECIFIC USER QUERY is provided, prioritize items that are relevant to that query.
+3. In the "ai_insight" field, provide additional value:
    - If CATEGORY is SUGGESTION: Propose 2-3 NEW, relevant suggestions that weren't mentioned in the chat.
    - If CATEGORY is DECISION: Highlight any potential risks or side effects of these decisions.
    - If CATEGORY is ACTION: Suggest a logical next step or a tool that could help.

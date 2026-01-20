@@ -38,6 +38,258 @@ mongoose
   .then(() => console.log("MongoDB connected"))
   .catch((err) => console.error("MongoDB connection error:", err));
 
+// AI Logic Configuration
+const axios = require("axios");
+const AI_SERVICE_URL = process.env.AI_SERVICE_URL || "http://localhost:8000";
+const groupQueues = new Map(); // groupId -> { messages: [], charCount: 0, isProcessing: false }
+
+async function processAIQueue(groupId) {
+  if (mongoose.connection.readyState !== 1) {
+    console.warn(
+      `[AI] Skipping queue processing for group ${groupId}: MongoDB not connected.`,
+    );
+    return;
+  }
+  const queue = groupQueues.get(groupId);
+  if (!queue || queue.isProcessing || queue.messages.length === 0) return;
+
+  try {
+    queue.isProcessing = true;
+    console.log(
+      `[AI] Processing queue for group ${groupId}: ${queue.messages.length} messages, ${queue.charCount} chars`,
+    );
+
+    const payload = {
+      messages: queue.messages.map((m) => ({
+        user: m.user,
+        message: m.message,
+        timestamp: m.timestamp,
+        metadata: { id: m.id, userId: m.userId },
+      })),
+    };
+
+    const response = await axios.post(`${AI_SERVICE_URL}/ai/classify`, payload);
+    const classifiedData = response.data;
+
+    if (classifiedData && classifiedData.messages) {
+      let savedCount = 0;
+      for (const classified of classifiedData.messages) {
+        const types = classified.type || [];
+        const messageId = classified.metadata?.id;
+        const userId = classified.metadata?.userId;
+
+        console.log(
+          `[AI Debug] Message: "${classified.message.slice(0, 30)}..." | LLM Types: [${types.join(", ")}]`,
+        );
+
+        // Ensure we match regardless of case from LLM
+        const categories = types.filter((t) =>
+          [
+            "DECISION",
+            "ACTION",
+            "ASSUMPTION",
+            "SUGGESTION",
+            "CONSTRAINT",
+            "QUESTION",
+          ].includes(t.toUpperCase()),
+        );
+
+        if (categories.length > 0 && messageId) {
+          // Save to separate Context collection as requested
+          await Context.create({
+            messageId,
+            groupId,
+            userId: userId,
+            content: classified.message,
+            category: categories.map((c) => c.toUpperCase()),
+            confidence: {
+              score: classified.confidence?.score || 1,
+              reason: classified.confidence?.reason || "",
+            },
+            classifiedAt: new Date(),
+          });
+
+          console.log(
+            `[AI] [MongoDB] Saved context for message ${messageId}: ${categories.join(", ")}`,
+          );
+          savedCount++;
+        }
+      }
+
+      if (savedCount > 0) {
+        console.log(
+          `[AI] Successfully saved ${savedCount} context items in group ${groupId}`,
+        );
+        io.to(`group:${groupId}`).emit("signals-updated", {
+          groupId,
+          count: savedCount,
+          message: `${savedCount} context signals identified by AI`,
+        });
+      } else {
+        console.log(
+          `[AI] Processed ${classifiedData.messages.length} messages but found no relevant signals in target categories.`,
+        );
+      }
+    }
+
+    // Clear queue after processing
+    groupQueues.set(groupId, {
+      messages: [],
+      charCount: 0,
+      isProcessing: false,
+    });
+    console.log(`[AI] Queue cleared for group ${groupId}`);
+  } catch (error) {
+    console.error(
+      `[AI] Error processing queue for group ${groupId}:`,
+      error.message,
+    );
+    queue.isProcessing = false;
+  }
+}
+async function updateGroupSummary(groupId) {
+  if (mongoose.connection.readyState !== 1) return;
+
+  try {
+    // 1. Get last 50 messages for context
+    const messages = await Message.find({ group: groupId })
+      .sort({ createdAt: -1 })
+      .limit(50)
+      .populate("sender", "name");
+
+    if (messages.length < 3) return; // Not enough to summarize
+
+    const formattedMessages = messages.reverse().map((m) => ({
+      user: m.sender?.name || "Member",
+      message: m.content,
+      timestamp: m.createdAt,
+    }));
+
+    // 2. Call AI Summarize API
+    const response = await axios.post(`${AI_SERVICE_URL}/ai/summarize`, {
+      messages: formattedMessages,
+    });
+
+    const summaryData = response.data;
+
+    if (summaryData && summaryData.summary) {
+      // 3. Upsert Summary in DB
+      const updatedSummary = await Summary.findOneAndUpdate(
+        { groupId },
+        {
+          content: summaryData.summary,
+          keyPoints: summaryData.key_points || [],
+          updatedAt: new Date(),
+        },
+        { upsert: true, new: true },
+      );
+
+      console.log(`[AI] [Summary] Updated for group ${groupId}`);
+
+      // 4. Emit update to group
+      io.to(`group:${groupId}`).emit("summary-updated", {
+        groupId,
+        summary: updatedSummary.content,
+        keyPoints: updatedSummary.keyPoints,
+        updatedAt: updatedSummary.updatedAt,
+      });
+    }
+  } catch (error) {
+    console.error(
+      `[AI] Error updating summary for group ${groupId}:`,
+      error.message,
+    );
+  }
+}
+
+async function checkGroupContradictions(groupId) {
+  if (mongoose.connection.readyState !== 1) return;
+
+  try {
+    const messages = await Message.find({ group: groupId })
+      .sort({ createdAt: -1 })
+      .limit(30)
+      .populate("sender", "name");
+
+    if (messages.length < 5) return;
+
+    const formattedMessages = messages.reverse().map((m) => ({
+      user: m.sender?.name || "Member",
+      message: m.content,
+      timestamp: m.createdAt,
+    }));
+
+    const contexts = await Context.find({ groupId })
+      .sort({ classifiedAt: -1 })
+      .limit(20);
+
+    const contextData = {
+      prior_decisions: contexts
+        .filter((c) => c.category.includes("DECISION"))
+        .map((c) => c.content),
+      prior_actions: contexts
+        .filter((c) => c.category.includes("ACTION"))
+        .map((c) => c.content),
+      prior_constraints: contexts
+        .filter((c) => c.category.includes("CONSTRAINT"))
+        .map((c) => c.content),
+      prior_assumptions: contexts
+        .filter((c) => c.category.includes("ASSUMPTION"))
+        .map((c) => c.content),
+    };
+
+    const response = await axios.post(`${AI_SERVICE_URL}/ai/contradict`, {
+      messages: formattedMessages,
+      context: contextData,
+    });
+
+    const contradictionData = response.data;
+
+    if (
+      contradictionData &&
+      contradictionData.contradictions &&
+      contradictionData.contradictions.length > 0
+    ) {
+      const criticalContradictions = contradictionData.contradictions.filter(
+        (c) => c.severity === "critical" || c.severity === "high",
+      );
+
+      if (criticalContradictions.length > 0) {
+        const warningMessage = `⚠️ Contradiction Detected: ${criticalContradictions[0].explanation}`;
+
+        const messageData = {
+          group: groupId,
+          sender: new mongoose.Types.ObjectId("000000000000000000000000"),
+          type: "text",
+          content: warningMessage,
+        };
+
+        const message = await Message.create(messageData);
+
+        io.to(`group:${groupId}`).emit("new-message", {
+          _id: message._id.toString(),
+          groupId,
+          userId: "ai-system",
+          userName: "signalDesk",
+          userAvatar: "https://api.dicebear.com/7.x/bottts/svg?seed=signaldesk",
+          content: message.content,
+          type: "text",
+          createdAt: message.createdAt,
+        });
+
+        console.log(
+          `[AI] [Contradiction] Warning sent to group ${groupId}: ${criticalContradictions.length} contradictions found`,
+        );
+      }
+    }
+  } catch (error) {
+    console.error(
+      `[AI] Error checking contradictions for group ${groupId}:`,
+      error.message,
+    );
+  }
+}
+
 const MessageSchema = new mongoose.Schema({
   group: { type: mongoose.Schema.Types.ObjectId, ref: "Group", required: true },
   sender: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
@@ -54,6 +306,43 @@ const MessageSchema = new mongoose.Schema({
 
 const Message =
   mongoose.models.Message || mongoose.model("Message", MessageSchema);
+
+const ContextSchema = new mongoose.Schema({
+  messageId: { type: mongoose.Schema.Types.ObjectId, ref: "Message" },
+  groupId: { type: mongoose.Schema.Types.ObjectId, ref: "Group" },
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+  content: String,
+  category: [String],
+  confidence: {
+    score: Number,
+    reason: String,
+  },
+  classifiedAt: { type: Date, default: Date.now },
+});
+
+const Context =
+  mongoose.models.Context || mongoose.model("Context", ContextSchema);
+
+const SummarySchema = new mongoose.Schema({
+  groupId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Group",
+    required: true,
+    unique: true,
+  },
+  content: {
+    type: String,
+    required: true,
+  },
+  keyPoints: [String],
+  updatedAt: {
+    type: Date,
+    default: Date.now,
+  },
+});
+
+const Summary =
+  mongoose.models.Summary || mongoose.model("Summary", SummarySchema);
 
 const UserSchema = new mongoose.Schema({
   name: String,
@@ -248,7 +537,7 @@ io.on("connection", (socket) => {
       const project = await Project.findById(group.project);
       if (
         !project ||
-        !project.members.some((id) => id.toString() === socket.userId)
+        !project.members.some((id) => id && id.toString() === socket.userId)
       ) {
         socket.emit("error", { message: "Not authorized" });
         return;
@@ -256,7 +545,7 @@ io.on("connection", (socket) => {
 
       if (
         group.isPrivate &&
-        !group.members.some((id) => id.toString() === socket.userId)
+        !group.members.some((id) => id && id.toString() === socket.userId)
       ) {
         socket.emit("error", {
           message: "Not a member of this private channel",
@@ -306,6 +595,48 @@ io.on("connection", (socket) => {
       );
       io.to(`group:${groupId}`).emit("new-message", messageResponse);
 
+      // AI Queuing Logic
+      if (type === "text" || !type) {
+        let queue = groupQueues.get(groupId) || {
+          messages: [],
+          charCount: 0,
+          isProcessing: false,
+        };
+        queue.messages.push({
+          id: messageResponse._id,
+          userId: messageResponse.userId,
+          user: messageResponse.userName,
+          message: messageResponse.content,
+          timestamp: messageResponse.createdAt,
+        });
+        queue.charCount += messageResponse.content.length;
+        groupQueues.set(groupId, queue);
+        console.log(
+          `[AI Queue] Group ${groupId}: Added msg. Total: ${queue.messages.length} msgs, ${queue.charCount} chars`,
+        );
+
+        // Immediate bypass for 5000+ chars
+        if (queue.charCount >= 5000) {
+          console.log(
+            `[AI Bypass] High volume detected in group ${groupId} (${queue.charCount} chars). Triggering immediately.`,
+          );
+          processAIQueue(groupId);
+        } else if (queue.messages.length >= 5 || queue.charCount >= 1000) {
+          // Normal triggers - check every 15 seconds if not already processing
+          if (!queue.isProcessing && !queue.timeoutId) {
+            console.log(
+              `[AI Timer] Threshold reached for group ${groupId}. Setting 5s timer.`,
+            );
+            queue.timeoutId = setTimeout(() => {
+              processAIQueue(groupId);
+              updateGroupSummary(groupId);
+              checkGroupContradictions(groupId);
+              queue.timeoutId = null;
+            }, 5000);
+          }
+        }
+      }
+
       console.log(`Message sent to group ${groupId} by user ${socket.userId}`);
 
       // Broadcast Notification
@@ -345,12 +676,82 @@ io.on("connection", (socket) => {
     }
   });
 
+  socket.on("send-system-message", async (data) => {
+    try {
+      const { groupId, content, userName, userAvatar } = data;
+
+      const messageData = {
+        group: groupId,
+        sender: new mongoose.Types.ObjectId("000000000000000000000000"), // System ID
+        type: "text",
+        content: content || "",
+      };
+
+      const message = await Message.create(messageData);
+
+      const messageResponse = {
+        _id: message._id.toString(),
+        groupId,
+        userId: "ai-system",
+        userName: userName || "signalDesk",
+        userAvatar:
+          userAvatar ||
+          "https://api.dicebear.com/7.x/bottts/svg?seed=signaldesk",
+        content: message.content,
+        type: "text",
+        createdAt: message.createdAt,
+      };
+
+      io.to(`group:${groupId}`).emit("new-message", messageResponse);
+    } catch (error) {
+      console.error("System message error:", error);
+    }
+  });
+
+  socket.on("ai-thinking", ({ groupId, isThinking }) => {
+    socket.to(`group:${groupId}`).emit("ai-status", {
+      groupId,
+      isThinking,
+    });
+  });
+
   socket.on("typing", ({ groupId, isTyping }) => {
     socket.to(`group:${groupId}`).emit("user-typing", {
       groupId,
       userId: socket.userId,
       isTyping,
     });
+  });
+
+  socket.on("debug:save-dummy-context", async (data) => {
+    console.log(`[DEBUG] Saving dummy context for user ${socket.userId}`);
+    try {
+      if (mongoose.connection.readyState !== 1) {
+        socket.emit("error", { message: "Database not connected" });
+        return;
+      }
+      const dummy = await Context.create({
+        messageId: new mongoose.Types.ObjectId(),
+        groupId: data.groupId || new mongoose.Types.ObjectId(),
+        userId: socket.userId,
+        content:
+          data.content || "This is a dummy AI-identified signal for testing.",
+        category: [data.category || "SUGGESTION"],
+        confidence: {
+          score: 0.95,
+          reason: "Dummy generated for debugging purposes.",
+        },
+        classifiedAt: new Date(),
+      });
+      console.log(`[DEBUG] Dummy context saved: ${dummy._id}`);
+      socket.emit("signals-updated", {
+        groupId: data.groupId,
+        count: 1,
+        message: "Dummy signal saved successfully",
+      });
+    } catch (err) {
+      console.error("Dummy save error:", err);
+    }
   });
 
   socket.on("disconnect", () => {

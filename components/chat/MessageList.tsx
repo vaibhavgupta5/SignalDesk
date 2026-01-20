@@ -12,8 +12,15 @@ import { Loader2 } from "lucide-react";
 
 export function MessageList() {
   const { activeGroupId } = useGroupStore();
-  const { messages, addMessage, setMessages, setTyping, typingUsers } =
-    useChatStore();
+  const {
+    messages,
+    addMessage,
+    setMessages,
+    setTyping,
+    typingUsers,
+    aiProcessing,
+    setAIProcessing,
+  } = useChatStore();
   const { user } = useAuthStore();
   const [isLoading, setIsLoading] = useState(false);
   const virtuosoRef = useRef<VirtuosoHandle>(null);
@@ -22,6 +29,9 @@ export function MessageList() {
   const groupTypingUsers = activeGroupId
     ? typingUsers[activeGroupId] || []
     : [];
+  const isAIThinking = activeGroupId
+    ? aiProcessing[activeGroupId] || false
+    : false;
 
   useEffect(() => {
     if (!activeGroupId) return;
@@ -61,15 +71,35 @@ export function MessageList() {
       }
     };
 
+    const handleAIStatus = ({ groupId, isThinking }: any) => {
+      if (groupId === activeGroupId) {
+        setAIProcessing(groupId, isThinking);
+      }
+    };
+
     socketClient.on("new-message", handleNewMessage);
     socketClient.on("user-typing", handleTyping);
+    socketClient.on("ai-status", handleAIStatus);
 
     return () => {
       socketClient.off("new-message", handleNewMessage);
       socketClient.off("user-typing", handleTyping);
+      socketClient.off("ai-status", handleAIStatus);
       socketClient.leaveGroup(activeGroupId);
     };
   }, [activeGroupId]);
+
+  useEffect(() => {
+    if (groupMessages.length > 0) {
+      setTimeout(() => {
+        virtuosoRef.current?.scrollToIndex({
+          index: groupMessages.length - 1,
+          align: "end",
+          behavior: "smooth",
+        });
+      }, 100);
+    }
+  }, [groupMessages.length]);
 
   if (!activeGroupId) {
     return (
@@ -95,7 +125,7 @@ export function MessageList() {
   }
 
   return (
-    <div className="flex-1 bg-[#0e0e11] flex flex-col">
+    <div className="flex-1 bg-[#0e0e11] flex flex-col overflow-hidden">
       {groupMessages.length === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center p-8 text-center animate-in fade-in-50">
           <div className="w-16 h-16 bg-white/5 rounded-2xl flex items-center justify-center mb-4">
@@ -112,6 +142,7 @@ export function MessageList() {
         <Virtuoso
           ref={virtuosoRef}
           data={groupMessages}
+          className="no-scrollbar"
           itemContent={(index, message) => {
             const previousMessage = index > 0 ? groupMessages[index - 1] : null;
             const showAvatar =
@@ -134,14 +165,22 @@ export function MessageList() {
         />
       )}
 
-      {groupTypingUsers.length > 0 && (
-        <div className="px-6 py-2 text-text-muted text-sm">
-          <span className="inline-flex items-center gap-1">
-            <span className="animate-pulse">●</span>
-            <span className="animate-pulse delay-150">●</span>
-            <span className="animate-pulse delay-300">●</span>
-            <span className="ml-2">Someone is typing...</span>
-          </span>
+      {(groupTypingUsers.length > 0 || isAIThinking) && (
+        <div className="px-6 py-2 text-text-muted text-sm flex flex-col gap-1">
+          {isAIThinking && (
+            <div className="flex items-center gap-2 text-accent animate-pulse">
+              <Loader2 size={12} className="animate-spin" />
+              <span className="font-medium">SignalDesk is thinking...</span>
+            </div>
+          )}
+          {groupTypingUsers.length > 0 && (
+            <span className="inline-flex items-center gap-1">
+              <span className="animate-pulse">●</span>
+              <span className="animate-pulse delay-150">●</span>
+              <span className="animate-pulse delay-300">●</span>
+              <span className="ml-1">Someone is typing...</span>
+            </span>
+          )}
         </div>
       )}
     </div>
